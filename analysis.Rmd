@@ -1,5 +1,5 @@
 ---
-title: "dissertation"
+title: "dissertation analysis"
 author: "Ying Chen"
 date: "19/06/2021"
 output: html_document
@@ -37,8 +37,8 @@ library(ggpubr)
 
 ## Understand London Crime in general
 
--   spatial data: download
--   crime data: download from <https://data.police.uk/data/> and select Metropolitan
+-   spatial data: downloaded from London Datastore at <https://data.london.gov.uk/dataset/statistical-gis-boundary-files-london> and stored in the local folder "data".
+-   crime data: downloaded from <https://data.police.uk/data/> by selecting only Metropolitan Police Service for data from April 2019 to April 2021, renamed the folder as "crime_data" stored in the local folder "data".
 
 ```{r message=FALSE}
 boroMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
@@ -54,8 +54,9 @@ msoaMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI"
   st_transform(., 27700)
 ```
 
+The following function used to search files that follow a specific pattern is obtained from <https://github.com/sjaraha/clustering-spatiotemporal-data>.
+
 ```{r}
-# function obtained from xxxxx
 list_data_paths <- function(pattern, rec){
   # searches working directory for files that match the specified pattern
   # on match, adds file path to a list
@@ -223,14 +224,14 @@ tm_shape(msoaMap) +
   tm_layout(main.title="Violent Crimes London April 2019 to April 2021",
             main.title.size=1)
 
-tm_shape(boroMap) +
+tm_shape(msoaMap) +
   tm_polygons(col = NA, alpha = 0.5) +
   tm_shape(ss_london) +
   tm_dots(col = "yellow") +
   tm_layout(main.title="Stop and Search London April 2019 to April 2021", 
             main.title.size=1)
   
-tm_shape(boroMap) + 
+tm_shape(msoaMap) + 
   tm_polygons(col = NA, alpha = 0.5) +
   tm_shape(ss60_london) +
   tm_dots(col = "red") +
@@ -238,7 +239,7 @@ tm_shape(boroMap) +
             main.title.size=1)
 ```
 
-## st-dbscan (time-consuming)
+## st-dbscan (DISCUSSION)
 
 ```{r eval=FALSE, include=FALSE}
 #install.packages("devtools")
@@ -257,12 +258,14 @@ location_with_visits <-
 
 ## Make continuous observations
 
-```{r message=FALSE}
+We have explored the point pattern analysis for London S&S and how about looking at MSOAs, wards or boroughs as a whole? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group point obvervations into MSOA (averaged with 8,346 population in 2010) and there are 983 MSOAs in London.
+
+```{r message=FALSE, warning=FALSE}
 msoaData <- read_csv("https://data.london.gov.uk/download/msoa-atlas/20264159-36cb-4aa2-8371-ae884ae83e88/msoa-data.csv",na = c("NA", "n/a")) %>% 
   clean_names() 
 ```
 
-Notice msoaData has 984 rows while the msoaMap has 983 rows. After inspection, the msoaData has an extra row showing the average statistics for all London msoa, which needs to be removed.
+Notice msoaData has 984 rows while the msoaMap has 983 rows. After inspection, the msoaData has an extra row showing the average statistics for all London MSOA, which needs to be removed.
 
 ```{r message=FALSE}
 msoaData <- msoaData[1:983,]
@@ -310,7 +313,7 @@ msoaDataMerged <-
             by = c("MSOA11CD" = "middle_super_output_area"))
 ```
 
-Count all S&S (section 60) for each ethnic group that fall within each MSOA
+Count all S&S (section 60) for each ethnic group that fall within MSOAs.
 
 ```{r message=FALSE}
 ss60_joined <- st_join(ss60_london, msoaMap) %>% 
@@ -337,6 +340,8 @@ ss60_ethicFinal <- left_join(ss60_ethnic, ss60_ethnicAll) %>%
                 total_ss60 = "sum(count)")
 
 ```
+
+Same thing, counted for S&S outcomes.
 
 ```{r message=FALSE}
 ss60_joined2 <- st_join(ss60_london, msoaMap) %>% 
@@ -373,13 +378,13 @@ merged <- left_join(msoaDataMerged, vio_count) %>%
   left_join(., ss60_outcomeFinal)
 ```
 
-check if the sum of S&S by ethical group is equal to the sum of outcome
+Check if the sum of S&S by ethical group is equal to the sum of outcome
 
 ```{r}
 merged$total_ss60[!(merged$total_ss60 %in% merged$total_ss60_outcome)]
 ```
 
-"ineger(0)" means they are equa so we can remove one and then we can calculate the rates
+"ineger(0)" means they are equal so we can remove one and then we can calculate the rates.
 
 ```{r message=FALSE}
 all_data <- subset(merged, select = -c(total_ss60_outcome,msoa_name)) %>% 
@@ -401,7 +406,7 @@ all_data <- subset(merged, select = -c(total_ss60_outcome,msoa_name)) %>%
 
 ```
 
-Create a subset data of all rates
+Create a subset data of all rates for later parts.
 
 ```{r}
 all_rates <- all_data %>% 
@@ -410,7 +415,9 @@ all_rates <- all_data %>%
 
 ## Spatial autocorrelation
 
-Create neighborhoods list and spatial weight matrix
+Create a neighborhoods list and spatial weight matrix.
+
+[**Q: when creating a neighborhoods list using poly2nb, before setting 'snap' gives me error and after setting it to 0.01 it runs successfully, but how to determine if 0.01 is a reasonable value since the out map cannot really tell anything.**]{.ul}
 
 ```{r message=FALSE, warning=FALSE}
 library(spdep)
@@ -420,9 +427,9 @@ coordsM<- all_rates%>%
   st_geometry()
 plot(coordsM,axes=TRUE)
 
-# create a neihgborhoods list
+# create a neighborhoods list
 LMsoa_nb <- all_rates %>%
-  poly2nb(., queen=T, snap=0.01)  #don't know if setting snap=0.1 is right, <MAUP> 
+  poly2nb(., queen=T, snap=0.01)  
 plot(LMsoa_nb, st_geometry(coordsM), col="red")
 
 # create a spatial weight object
@@ -432,39 +439,49 @@ LMsoa_lw <- LMsoa_nb %>%
 
 ### Moran's I
 
-Q: should I change all NAs in all_rates to 0? Some of the msoas have S&S but very low rate like 0.002%, if turning NAs to 0, then places with no S&S or few S&S are given the same interpretation...
+[**Q: Should I change all NAs in all_rates to 0? Some of the MSOAs have S&S but with a very low rate like 0.002%. Turning NAs to 0 will give places with no S&S the same color/interpretation as places with low rate, whereas keeping NAs will just show gray on the map. However, keeping NAs seems to create troubles in later statistical tests. For now, I chose to ignore NAs.**]{.ul}
 
 ```{r}
 all_rates %>%
   pull(avg_household_ss60_rate) %>%
   as.vector()%>%
-  na.omit(all_rates) %>%   
+  na.omit(all_rates) %>%   # ignore the NA
   moran.test(., LMsoa_lw, zero.policy = TRUE)
 ```
 
-The Moran's I statistic = 0.37 indicates S&S (section 60) is weakly clustered across MSOA.
+The Moran's I statistic = 0.39 indicates we have a weak clustering for S&S (section 60).
 
-```{r eval=FALSE, include=FALSE}
-## how to write a function which generates the Moran I statistics to an empty list
+[**Q: How to write a function which append the Moran I statistics to an empty dataframe for ALL variables at one click? (the following is my failed trial)**]{.ul}
 
-# create an empty list with 8 rows
-d <-  data.frame( x=rep(0, 8), y=rep(0,8), z=rep(0,8))
+```{r}
+# variables used for the test
+a <- c( "avg_household_vio_rate", "avg_household_ss60_rate",
+        "ss60_black_rate","ss60_white_rate",
+        "ss60_asian_rate","ss60_arrest_rate")
 
-for(i in 1:ncol(all_rates)) { 
-  a <- all_rates %>% 
-    na.omit(all_rates) %>% 
-    pull(all_rates[,i]) %>%
-    st_drop_geometry() %>% 
-    as.vector()
-  b <- moran.test(a, LMsoa_lw, zero.policy = TRUE)
+# function to compute coefficient
+test <- function(x) {
+  all_rates %>% 
+    pull(x) %>% 
+    as.vector() %>% 
+    na.omit(all_rates) %>%
+    moran.test(., LMsoa_lw, zero.policy = TRUE)
 }
+
+b <- c(test(x=a[2])$estimate)
+b
+
+c <- data.frame(A= numeric(0), B= numeric(0), C= numeric(0))
+c <- rbind(b)
 ```
 
 ### Geary's C
 
-```{r eval=FALSE, include=FALSE}
+[**Q: The following statistical tests give me errors**]{.ul}
+
+```{r}
 all_rates %>%
-  pull(ss60_arrest_rate) %>%
+  pull(avg_household_vio_rate) %>%
   as.vector()%>%
   na.omit(all_rates) %>% 
   geary.test(., LMsoa_lw, zero.policy = TRUE)
@@ -491,3 +508,96 @@ test <- all_rates %>%
   localmoran(., LMsoa_lw)%>%
   as_tibble()
 ```
+
+## Clustering
+
+```{r}
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering visualization
+library(dendextend) # for comparing two dendrograms
+
+df <- subset(all_rates) %>% 
+  st_drop_geometry()
+
+rownames(df) <- df$msoa11cd 
+df <- subset(df, select=-msoa11cd) %>% 
+  scale(.)
+```
+
+### Agglomerative Hierarchical Clustering
+
+```{r}
+# methods to assess
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+
+# function to compute coefficient
+ac <- function(x) {
+  agnes(df, method = x)$ac
+}
+
+map_dbl(m, ac) 
+```
+
+```{r}
+# Dissimilarity matrix
+d <- dist(df, method = "euclidean")
+
+# Hierarchical clustering using Complete Linkage
+hc1 <- hclust(d, method = "ward")
+
+# Plot the obtained dendrogram
+plot(hc1, cex = 0.6, hang = -1)
+
+# Compute with agnes
+hc2 <- agnes(df, method = "complete")
+# Agglomerative coefficient
+hc2$ac
+```
+
+### Divisive Hierarchical Clustering
+
+```{r}
+# compute divisive hierarchical clustering
+hc4 <- diana(df)
+
+# Divise coefficient; amount of clustering structure found
+hc4$dc
+
+# plot dendrogram
+pltree(hc4, cex = 0.6, hang = -1, main = "Dendrogram of diana")
+```
+
+```{r}
+# Ward's method
+hc5 <- hclust(d, method = "ward.D2" )
+
+# Cut tree into 6 groups
+sub_grp <- cutree(hc5, k = 6)
+
+# Number of members in each cluster
+table(sub_grp)
+
+```
+
+```{r}
+df2 <- data.frame(df) %>% 
+  mutate(cluster=sub_grp)
+
+plot(hc5, cex = 0.6)
+rect.hclust(hc5, k = 6, border = 2:5)
+```
+
+Find the optimal cluster number 
+
+```{r}
+library(factoextra)
+fviz_nbclust(df, FUN = hcut, method = "wss")
+```
+```{r}
+test <- na.omit(df2) 
+  
+fviz_cluster(list(data = df2, cluster = sub_grp))
+```
+
