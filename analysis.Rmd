@@ -1,0 +1,493 @@
+---
+title: "dissertation"
+author: "Ying Chen"
+date: "19/06/2021"
+output: html_document
+---
+
+```{r message=FALSE}
+library(sf)
+library(tidyverse)
+library(dplyr)
+library(janitor)
+library(RColorBrewer)
+library(classInt)
+library(sp)
+library(rgeos)
+library(rgdal)
+library(spatstat)
+library(here)
+library(maptools)
+library(GISTools)
+library(tmap)
+library(geojson)
+library(geojsonio)
+library(tmaptools)
+library(hexbin)
+library(ggspatial)
+library(ggsn)
+library(raster)
+library(fpc)
+library(dbscan)
+library(plotrix)
+library(spdep)
+library(ggplot2)
+library(ggpubr)
+```
+
+## Understand London Crime in general
+
+-   spatial data: download
+-   crime data: download from <https://data.police.uk/data/> and select Metropolitan
+
+```{r message=FALSE}
+boroMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
+                              "London_Borough_Excluding_MHW.shp"))%>%
+  st_transform(., 27700)
+
+lsoaMap  <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
+                              "LSOA_2011_London_gen_MHW.shp"))%>%
+  st_transform(., 27700)
+
+msoaMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
+                              "MSOA_2011_London_gen_MHW.shp")) %>% 
+  st_transform(., 27700)
+```
+
+```{r}
+# function obtained from xxxxx
+list_data_paths <- function(pattern, rec){
+  # searches working directory for files that match the specified pattern
+  # on match, adds file path to a list
+  # returns list the list of matching file paths
+  ## pattern (str): regex pattern to match
+  ## rec (boolean): recurse into directories (True) or don't (False)
+  
+  # initialize list
+  data_path_list <- c()
+  # loop through directories
+  for (pd in list.dirs(recursive = rec)){
+    # loop through files in directories
+    for (f in list.files(pd)){
+      # find files that match the pattern
+      if (grepl(pattern, f, ignore.case = FALSE)==TRUE){
+        # construct path to matching file
+        data_path <- paste(pd,f, sep="/")
+        # add path to list
+        data_path_list <- c(data_path_list,data_path)
+      }}}
+  # return list of paths to matching files
+  return(data_path_list)
+}
+```
+
+```{r echo=TRUE, message = FALSE}
+setwd("/Users/yingchen/Documents2/CASA/dissertation/london stop and search/data/crime_data")
+crime_list <- list_data_paths("\\-metropolitan-street.csv$",FALSE) 
+
+crime <- crime_list %>% 
+  lapply(read_csv) %>% 
+  bind_rows
+```
+
+Remove duplicated rows, clean names and select points within London.
+
+```{r message = FALSE}
+crime<- crime %>% 
+  clean_names() %>% 
+  distinct(.) %>% 
+  filter(latitude != "NA" | longitude != "NA") %>% 
+  st_as_sf(., coords = c("longitude", "latitude"), 
+           crs = 4326) %>% 
+  st_transform(., 27700) 
+
+crime_london <- crime[boroMap,]
+```
+
+Create a table showing the number of crimes for each type.
+
+```{r message=False, warning=False, results='asis'}
+library(knitr)
+crimeTypes <- crime_london %>% 
+  group_by(crime_type) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(count)) %>% 
+  st_drop_geometry()
+kable(crimeTypes, caption = 'London crimes by types from April 2019 to April 2021')
+```
+
+I am interested in comparing violent crimes with stop and searches under one particular legislation (section 60), therefore I need to select violent crimes from all crimes first.
+
+```{r}
+violence_london <- crime_london %>% 
+  filter(., crime_type=='Violence and sexual offences') 
+```
+
+What are the most common outcome for violent crimes in London?
+
+```{r message=False, warning=False, results='asis'}
+Tb_violenceOutcome <- violence_london %>% 
+  group_by(last_outcome_category) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(count)) %>% 
+  st_drop_geometry()
+kable(Tb_violenceOutcome, caption = 'London violent crimes by outcomes from April 2019 to April 2021')
+```
+
+I want to count the number of violent crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names.
+
+```{r message=False, warning=False, results='asis'}
+violence_london$boro_name = substr(violence_london$lsoa_name,1,nchar(violence_london$lsoa_name)-4)
+
+Tb_violenceBoro <- violence_london %>% 
+  group_by(boro_name) %>% 
+  summarise(., count=n(),) %>% 
+  arrange(desc(count)) %>% 
+  st_drop_geometry()
+kable(Tb_violenceBoro, caption = 'London violent crimes by boroughs from April 2019 to April 2021')
+```
+
+## Understand stop and search (S&S) data
+
+Clean names, remove duplicated records and select points within London boroughs.
+
+```{r echo=TRUE, message = FALSE}
+setwd("/Users/yingchen/Documents2/CASA/dissertation/london stop and search/data/crime_data")
+ss_list <- list_data_paths("\\-metropolitan-stop-and-search.csv$",FALSE) 
+
+ss <- ss_list %>% 
+  lapply(read_csv) %>% 
+  bind_rows
+```
+
+```{r message=FALSE, warning=False}
+ss <- ss %>% 
+  clean_names() %>% 
+  distinct(.) %>% 
+  filter(latitude != "NA" | longitude != "NA") %>% 
+  st_as_sf(., coords = c("longitude", "latitude"), 
+           crs = 4326) %>% 
+  st_transform(., 27700) 
+
+ss_london <- ss[boroMap,]
+```
+
+What are the common legislation and search object during S&S?
+
+```{r message=False, warning=False, results='asis'}
+Tb_ssLegis <- ss_london %>% 
+  group_by(legislation, object_of_search) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(count)) %>% 
+  st_drop_geometry()
+kable(Tb_ssLegis, caption = 'London S&S by legislation and search objects from April 2019 to April 2021')
+```
+
+The Criminal Justice and Public Order 1994 (section 60) aims to reduce violence in London. From April 2014, the UK government implements the Best Use of Stop and Search Scheme (BUSSS) and it gives more police power to stop and search people without having reasonable grounds for suspicion if violence is anticipated by police. The main purpose of the scheme is to prevent violent crimes (such as knife crime) before it happens. Therefore, comparing the distribution of section 60 usage and actual violent crime locations can help understand whether S&S is an effective way of deterring violent crimes.
+
+```{r}
+ss60_london <- ss_london %>% 
+  filter(legislation == "Criminal Justice and Public Order Act 1994 (section 60)") 
+```
+
+What are the most common ethnicity of people being S&S for potential violence? Any change in trend of years?
+
+```{r message=False, warning=False, results='asis'}
+Tb_ss60Outcome <- ss60_london %>% 
+  group_by(officer_defined_ethnicity) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(count)) %>% 
+  st_drop_geometry()
+kable(Tb_ss60Outcome, caption = 'Ethnicities for people being S&S from April 2019 to April 2021')
+```
+
+What are the common ethnicity of a person being arrest by S&S? Any change in trend?
+
+```{r message=False, warning=False, results='asis'}
+Tb_ss60Arrest <- ss60_london %>% 
+  filter(outcome == "Arrest") %>% 
+  group_by(officer_defined_ethnicity) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(count)) %>% 
+  st_drop_geometry()
+kable(Tb_ss60Arrest, caption = 'Ethnicities for people being arrested for violating section 60 from April 2019 to April 2021')
+```
+
+## Simple point distribution
+
+```{r}
+tm_shape(msoaMap) + 
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(violence_london) +
+  tm_dots(col = "blue") +
+  tm_layout(main.title="Violent Crimes London April 2019 to April 2021",
+            main.title.size=1)
+
+tm_shape(boroMap) +
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(ss_london) +
+  tm_dots(col = "yellow") +
+  tm_layout(main.title="Stop and Search London April 2019 to April 2021", 
+            main.title.size=1)
+  
+tm_shape(boroMap) + 
+  tm_polygons(col = NA, alpha = 0.5) +
+  tm_shape(ss60_london) +
+  tm_dots(col = "red") +
+  tm_layout(main.title= "S&S (section 60) London April 2019 to April 2021", 
+            main.title.size=1)
+```
+
+## st-dbscan (time-consuming)
+
+```{r eval=FALSE, include=FALSE}
+#install.packages("devtools")
+#devtools::install_github("gdmcdonald/stdbscanr")
+library(stdbscanr)
+
+location_with_visits <- 
+  get_clusters_from_data(df = ss60_londonDF,
+                         x = "longitude", 
+                         y = "latitude", 
+                         t = "date",
+                         eps = 5000,
+                         eps_t = 360,
+                         minpts = 1000)
+```
+
+## Make continuous observations
+
+```{r message=FALSE}
+msoaData <- read_csv("https://data.london.gov.uk/download/msoa-atlas/20264159-36cb-4aa2-8371-ae884ae83e88/msoa-data.csv",na = c("NA", "n/a")) %>% 
+  clean_names() 
+```
+
+Notice msoaData has 984 rows while the msoaMap has 983 rows. After inspection, the msoaData has an extra row showing the average statistics for all London msoa, which needs to be removed.
+
+```{r message=FALSE}
+msoaData <- msoaData[1:983,]
+```
+
+Columns we need:
+
+> -   "age_structure_2011_census_all_ages",
+> -   "households_2011_all_households",
+>
+> *the above can calculate violent crime rate and overall S&S rate by dividing by the number of crimes/S&S in each geographic unit*
+>
+> -   "ethnic_group_2011_census_white",
+> -   "ethnic_group_2011_census_mixed_multiple_ethnic_groups"，
+> -   "ethnic_group_2011_census_asian_asian_british",
+> -   "ethnic_group_2011_census_black_african_caribbean_black_british",
+> -   "ethnic_group_2011_census_other_ethnic_group",
+> -   "ethnic_group_2011_census_bame", ------------ ***what does "bame"mean???***
+>
+> *the above can calculate specific S&S rate for each ethnic group because the S&S data also has ethnic data*
+>
+> -   "economic_activity_2011_census_unemployment_rate",
+> -   "economic_activity_2011_census_economically_inactive_percent",
+>
+> *the above might be useful if to calculate spatial autocorrelation between S&S rate and unemployment/economically inactive rate*
+
+```{r message=FALSE}
+cols <- c(
+"middle_super_output_area",
+"msoa_name",
+"age_structure_2011_census_all_ages",
+"households_2011_all_households",
+"ethnic_group_2011_census_white",                                               
+"ethnic_group_2011_census_mixed_multiple_ethnic_groups",                        
+"ethnic_group_2011_census_asian_asian_british",
+"ethnic_group_2011_census_black_african_caribbean_black_british",
+"ethnic_group_2011_census_other_ethnic_group",
+"ethnic_group_2011_census_bame",
+"economic_activity_2011_census_unemployment_rate",                                
+"economic_activity_2011_census_economically_inactive_percent")
+
+msoaDataMerged <-
+  left_join(msoaMap %>% dplyr::select(MSOA11CD,MSOA11NM,geometry),
+            msoaData %>% dplyr::select(all_of(cols)),
+            by = c("MSOA11CD" = "middle_super_output_area"))
+```
+
+Count all S&S (section 60) for each ethnic group that fall within each MSOA
+
+```{r message=FALSE}
+ss60_joined <- st_join(ss60_london, msoaMap) %>% 
+  group_by(MSOA11CD, officer_defined_ethnicity) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(MSOA11CD)) %>% 
+  st_drop_geometry()
+
+ss60_ethnic <- ss60_joined %>% 
+  pivot_wider(names_from = officer_defined_ethnicity, values_from = count)
+
+
+ss60_ethnicAll <- ss60_joined %>% 
+  group_by(MSOA11CD) %>% 
+  summarise(., sum(count),) %>%
+  arrange(desc(MSOA11CD)) 
+
+ss60_ethicFinal <- left_join(ss60_ethnic, ss60_ethnicAll) %>% 
+  dplyr::rename(ss60_black = "Black",
+                ss60_white = "White",
+                ss60_asian = "Asian",
+                ss60_other = "Other",
+                ss60_na = "NA",
+                total_ss60 = "sum(count)")
+
+```
+
+```{r message=FALSE}
+ss60_joined2 <- st_join(ss60_london, msoaMap) %>% 
+  group_by(MSOA11CD, outcome) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(MSOA11CD)) %>% 
+  st_drop_geometry()
+
+ss60_outcome <- ss60_joined2 %>% 
+  pivot_wider(names_from = outcome, values_from = count)
+
+ss60_outcomeAll <- ss60_joined2 %>% 
+  group_by(MSOA11CD) %>% 
+  summarise(., sum(count),) %>%
+  arrange(desc(MSOA11CD)) 
+
+ss60_outcomeFinal <- left_join(ss60_outcome,ss60_outcomeAll) %>% 
+  dplyr::rename(total_ss60_outcome = "sum(count)")
+```
+
+Count all violent crimes that fall within each MSOA
+
+```{r message=FALSE}
+vio_count <- st_join(violence_london, lsoaMap) %>% 
+  group_by(MSOA11CD) %>% 
+  summarise(., count=n(),) %>%
+  arrange(desc(MSOA11CD)) %>% 
+  st_drop_geometry() %>% 
+  na.omit(.) %>% 
+  dplyr::rename(total_violent_crime = "count")
+
+merged <- left_join(msoaDataMerged, vio_count) %>% 
+  left_join(., ss60_ethicFinal) %>% 
+  left_join(., ss60_outcomeFinal)
+```
+
+check if the sum of S&S by ethical group is equal to the sum of outcome
+
+```{r}
+merged$total_ss60[!(merged$total_ss60 %in% merged$total_ss60_outcome)]
+```
+
+"ineger(0)" means they are equa so we can remove one and then we can calculate the rates
+
+```{r message=FALSE}
+all_data <- subset(merged, select = -c(total_ss60_outcome,msoa_name)) %>% 
+  clean_names() %>%   
+  mutate(avg_household_vio_rate = total_violent_crime/
+           households_2011_all_households*100) %>% 
+  mutate(avg_household_ss60_rate = total_ss60 / 
+           households_2011_all_households*100) %>% 
+  mutate(ss60_black_rate = ss60_black/
+           ethnic_group_2011_census_black_african_caribbean_black_british*100) %>% 
+  mutate(ss60_white_rate = ss60_white/
+           ethnic_group_2011_census_white*100) %>% 
+  mutate(ss60_asian_rate = ss60_asian/
+           ethnic_group_2011_census_asian_asian_british*100) %>% 
+  mutate(ss60_other_ethnicity_rate = ss60_other/
+           ethnic_group_2011_census_other_ethnic_group*100) %>% 
+  mutate(ss60_arrest_rate = arrest/total_ss60*100) %>% 
+  mutate_if(is.numeric, ~round(., 2))
+
+```
+
+Create a subset data of all rates
+
+```{r}
+all_rates <- all_data %>% 
+  dplyr::select(ends_with("rate") | msoa11cd) 
+```
+
+## Spatial autocorrelation
+
+Create neighborhoods list and spatial weight matrix
+
+```{r message=FALSE, warning=FALSE}
+library(spdep)
+# calculate centroids of all msoas in London
+coordsM<- all_rates%>%
+  st_centroid()%>%
+  st_geometry()
+plot(coordsM,axes=TRUE)
+
+# create a neihgborhoods list
+LMsoa_nb <- all_rates %>%
+  poly2nb(., queen=T, snap=0.01)  #don't know if setting snap=0.1 is right, <MAUP> 
+plot(LMsoa_nb, st_geometry(coordsM), col="red")
+
+# create a spatial weight object
+LMsoa_lw <- LMsoa_nb %>%
+  nb2listw(., style="C")
+```
+
+### Moran's I
+
+Q: should I change all NAs in all_rates to 0? Some of the msoas have S&S but very low rate like 0.002%, if turning NAs to 0, then places with no S&S or few S&S are given the same interpretation...
+
+```{r}
+all_rates %>%
+  pull(avg_household_ss60_rate) %>%
+  as.vector()%>%
+  na.omit(all_rates) %>%   
+  moran.test(., LMsoa_lw, zero.policy = TRUE)
+```
+
+The Moran's I statistic = 0.37 indicates S&S (section 60) is weakly clustered across MSOA.
+
+```{r eval=FALSE, include=FALSE}
+## how to write a function which generates the Moran I statistics to an empty list
+
+# create an empty list with 8 rows
+d <-  data.frame( x=rep(0, 8), y=rep(0,8), z=rep(0,8))
+
+for(i in 1:ncol(all_rates)) { 
+  a <- all_rates %>% 
+    na.omit(all_rates) %>% 
+    pull(all_rates[,i]) %>%
+    st_drop_geometry() %>% 
+    as.vector()
+  b <- moran.test(a, LMsoa_lw, zero.policy = TRUE)
+}
+```
+
+### Geary's C
+
+```{r eval=FALSE, include=FALSE}
+all_rates %>%
+  pull(ss60_arrest_rate) %>%
+  as.vector()%>%
+  na.omit(all_rates) %>% 
+  geary.test(., LMsoa_lw, zero.policy = TRUE)
+
+```
+
+### General G
+
+```{r eval=FALSE, include=FALSE}
+all_rates %>%
+  na.omit(all_rates) %>% 
+  pull(ss60_arrest_rate) %>%
+  as.vector()%>%
+  globalG.test(., LMsoa_lw, zero.policy = TRUE)
+```
+
+### Local Moran's I
+
+```{r eval=FALSE, include=FALSE}
+test <- all_rates %>%
+  na.omit(all_rates) %>% 
+  pull(avg_household_ss60_rate) %>%
+  as.vector()%>%
+  localmoran(., LMsoa_lw)%>%
+  as_tibble()
+```
