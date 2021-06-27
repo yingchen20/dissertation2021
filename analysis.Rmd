@@ -244,36 +244,6 @@ tm_shape(msoaMap) +
             main.title.size=1)
 ```
 
-## Density plot
-
-```{r eval=FALSE, include=FALSE}
-# function to transform geometry to (x,y) coordinates from 
-# https://maczokni.github.io/crimemapping_textbook_bookdown/more-on-thematic-maps.html
-sfc_as_cols <- function(x, names = c("x","y")) {
-  stopifnot(inherits(x,"sf") && inherits(sf::st_geometry(x),"sfc_POINT"))
-  ret <- sf::st_coordinates(x)
-  ret <- tibble::as_tibble(ret)
-  stopifnot(length(names) == ncol(ret))
-  x <- x[ , !names(x) %in% names]
-  ret <- setNames(ret,names)
-  dplyr::bind_cols(x,ret)
-}
-ss60_london <- sfc_as_cols(ss60_london, c("longitude", "latitude"))
-
-
-ggplot(ss60_london, aes(x = longitude, y = latitude))+
-  ggtitle("S&S(s60) Density London Apr 2019 to Apr 2021")+
-  theme(plot.title=element_text(hjust = 0.5))+
-  labs(caption = "Copyright OpenStreetMap contributors",
-       x="Longitude",y="Latitude")+
-  annotation_map_tile(zoom=2) + 
-  stat_density2d(aes(fill = ..level.., 
-                     alpha = ..level..), 
-                 geom = "polygon") +  
-  scale_fill_gradientn(colours = c("white","red"), 
-                       name = "Density")
-```
-
 
 ## dbscan
 DBSCAN requires two parameters: 
@@ -313,6 +283,8 @@ From the output graph, we can see that up until distances of around 450 meters, 
 Therefore, setting eps to 400m or 450m is reasonable.
 
 ```{r warning=False, message=False}
+library(factoextra)
+
 db <- ss60_londonPoints %>%
   fpc::dbscan(.,eps = 450, MinPts = 50)  # 400m radius of at least 50 S&S(s60)
 
@@ -383,8 +355,10 @@ Observations:
 2. if setting as kNNdistplot suggests, the "knee" is usually quite large and it will give us a large cluster + some small clusters + isolated noises. 
 
 ```{r message=FALSE, warning=FALSE}
-ss60_blackSP <- ss60_london %>% 
-  filter(officer_defined_ethnicity == "Black") %>% 
+ss60_black <- ss60_london %>% 
+  filter(officer_defined_ethnicity == "Black") 
+
+ss60_blackSP <- ss60_black %>%  
   as(., 'Spatial') 
 
 ss60_blackPPP <- ppp(x=ss60_blackSP@coords[,1],
@@ -440,6 +414,7 @@ ss60_blackPoints %>%
   title(main="50-nearst Neighbor Distance Plot \n (MinPts=50, knee=2000)") %>% 
   abline(h = 2000, col = "red", lty = 2)
 ```
+
 plot:
 ```{r}
 db_b_KNN <- ss60_blackPoints %>%
@@ -552,25 +527,40 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 dbPlot_a_KNN
 ```
 
-```{r}
-ss60_asian <- ss60_asian %>% 
-  mutate(dbcluster=db_a$cluster)
+#### Plot cluster results on a openstreet basemap
 
+```{r message=FALSE}
+library(OpenStreetMap)
+
+# before plotting, we need to transform geometry to (x,y) coordinates and the function was found at <https://maczokni.github.io/crimemapping_textbook_bookdown/more-on-thematic-maps.html>
+sfc_as_cols <- function(x, names = c("x","y")) {
+  stopifnot(inherits(x,"sf") && inherits(sf::st_geometry(x),"sfc_POINT"))
+  ret <- sf::st_coordinates(x)
+  ret <- tibble::as_tibble(ret)
+  stopifnot(length(names) == ncol(ret))
+  x <- x[ , !names(x) %in% names]
+  ret <- setNames(ret,names)
+  dplyr::bind_cols(x,ret)
+}
+
+# add (x,y) coordinate and clusters to new columns  
+ss60_asian <- sfc_as_cols(ss60_asian, c("longitude", "latitude")) %>% 
+  mutate(dbcluster=db_a$cluster)  # here I chose the Ripley's K method of generating clusters 
+
+# create convex hull polygons to wrap around the points in our clusters
 hulls_a <- ss60_asian %>%
   group_by(dbcluster) %>%
   dplyr::mutate(hull = 1:n(),
                 hull = factor(hull, chull(longitude, latitude)))%>%
-  arrange(hull)
+  arrange(hull) %>% 
+  filter(dbcluster >=1) # since dbcluster < 1 are noises
 
-hulls_a <- hulls_a %>%
-  filter(dbcluster >=1)
-
-# add a basemap
+# create a bounding box of London
 LondonBB <- boroMap %>%
   st_transform(., 4326)%>%
   st_bbox()
 
-library(OpenStreetMap)
+# set the basemap showing London 
 basemap <- OpenStreetMap::openmap(c(51.2867602,-0.5103751),c(51.6918741,0.3340156), 
                                   zoom=NULL,
                                   "stamen-toner")
@@ -582,8 +572,8 @@ basemap_bng <- openproj(basemap, projection="+init=epsg:27700")
 autoplot.OpenStreetMap(basemap_bng) + 
   geom_point(data=ss60_asian, 
              aes(longitude,latitude, 
-                 fill=dbcluster),
-             size=0.3)+
+                 colour=dbcluster,
+                 fill=dbcluster),size=0.3)+
   geom_polygon(data = hulls_a, 
                aes(longitude,latitude, 
                    group=dbcluster,
@@ -591,14 +581,48 @@ autoplot.OpenStreetMap(basemap_bng) +
                alpha = 1,
                fill = "red") +
   theme(legend.position = "none") +
-  ggtitle("DBSCAN-Extracted Cluster")+
+  ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Asian People")+
   theme(plot.title=element_text(hjust = 0.5, face="bold"))+
   labs(caption = "Copyright OpenStreetMap contributors",
        x="Meter",y="Meter")
 ```
 
+How about for the black people?
 
-## st-dbscan (DISCUSSION)
+```{r}
+# add (x,y) coordinate and clusters to new columns  
+ss60_black <- sfc_as_cols(ss60_black, c("longitude", "latitude")) %>% 
+  mutate(dbcluster=db_b$cluster)  # here I chose the Ripley's K method of generating clusters 
+
+# create convex hull polygons to wrap around the points in our clusters
+hulls_b <- ss60_black %>%
+  group_by(dbcluster) %>%
+  dplyr::mutate(hull = 1:n(),
+                hull = factor(hull, chull(longitude, latitude)))%>%
+  arrange(hull) %>% 
+  filter(dbcluster >=1) # since dbcluster < 1 are noises
+
+
+# plot
+autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=ss60_black, 
+             aes(longitude,latitude, 
+                 colour=dbcluster,
+                 fill=dbcluster),size=0.3)+
+  geom_polygon(data = hulls_b, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "red") +
+  theme(legend.position = "none") +
+  ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Black People")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+```
+
+## st-dbscan 
 
 ```{r eval=FALSE, include=FALSE}
 #install.packages("devtools")
@@ -617,7 +641,9 @@ location_with_visits <-
 
 ## Make continuous observations
 
-We have explored the point pattern analysis for London S&S and how about looking at MSOAs, wards or boroughs as a whole? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group point obvervations into MSOA (averaged with 8,346 population in 2010) and there are 983 MSOAs in London.
+We have explored the point pattern analysis for London S&S and how about looking at MSOAs, wards or boroughs as a whole? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by MSOA (averaged with 8,346 population in 2010) and there are 983 MSOAs in London.
+
+The demographic data was obtained from <https://data.london.gov.uk/dataset/msoa-atlas>.
 
 ```{r message=FALSE, warning=FALSE}
 msoaData <- read_csv("https://data.london.gov.uk/download/msoa-atlas/20264159-36cb-4aa2-8371-ae884ae83e88/msoa-data.csv",na = c("NA", "n/a")) %>% 
@@ -700,7 +726,7 @@ ss60_ethicFinal <- left_join(ss60_ethnic, ss60_ethnicAll) %>%
 
 ```
 
-Same thing, counted for S&S outcomes.
+Count all S&S (section 60) for each outcome types that fall within MSOAs.
 
 ```{r message=FALSE}
 ss60_joined2 <- st_join(ss60_london, msoaMap) %>% 
@@ -721,7 +747,7 @@ ss60_outcomeFinal <- left_join(ss60_outcome,ss60_outcomeAll) %>%
   dplyr::rename(total_ss60_outcome = "sum(count)")
 ```
 
-Count all violent crimes that fall within each MSOA
+Count all violent crimes that fall within MSOAs.
 
 ```{r message=FALSE}
 vio_count <- st_join(violence_london, lsoaMap) %>% 
@@ -796,7 +822,7 @@ LMsoa_lw <- LMsoa_nb %>%
   nb2listw(., style="C")
 ```
 
-### Moran's I
+### Global Moran's I
 
 [**Q: Should I change all NAs in all_rates to 0? Some of the MSOAs have S&S but with a very low rate like 0.002%. Turning NAs to 0 will give places with no S&S the same color/interpretation as places with low rate, whereas keeping NAs will just show gray on the map. However, keeping NAs seems to create troubles in later statistical tests. For now, I chose to ignore NAs.**]{.ul}
 
@@ -808,18 +834,17 @@ all_rates %>%
   moran.test(., LMsoa_lw, zero.policy = TRUE)
 ```
 
-The Moran's I statistic = 0.39 indicates we have a weak clustering for S&S (section 60).
-
-[**Q: How to write a function which append the Moran I statistics to an empty dataframe for ALL variables at one click? (the following is my failed trial)**]{.ul}
+Make a table of all statical results for all my variables 
+[**Q: How to turn the results into a dataframe with common column names (i.e. Moran I statistic, Expectation, Variance) and each variable's results fill in new rows? **]{.ul}
 
 ```{r}
 # variables used for the test
-a <- c( "avg_household_vio_rate", "avg_household_ss60_rate",
+variable_names <- c( "avg_household_vio_rate", "avg_household_ss60_rate",
         "ss60_black_rate","ss60_white_rate",
         "ss60_asian_rate","ss60_arrest_rate")
 
 # function to compute coefficient
-test <- function(x) {
+cal_glb_moran <- function(x) {
   all_rates %>% 
     pull(x) %>% 
     as.vector() %>% 
@@ -827,65 +852,74 @@ test <- function(x) {
     moran.test(., LMsoa_lw, zero.policy = TRUE)
 }
 
-b <- c(test(x=a[2])$estimate)
-b
+datalist = list()
+for (aVar in variable_names) {
+  dat <- list(cal_glb_moran(x = aVar)$estimate)
+  datalist[[aVar]] <- dat
+}
+datalist
 
-c <- data.frame(A= numeric(0), B= numeric(0), C= numeric(0))
-c <- rbind(b)
 ```
+
+Global Moran's I tells us almost all my variables have some clustering except for arrest rate and ss60 for white people, showing police tend to randomly stop and search white people but intentionly or on purpose to search black and Asian people. 
 
 ### Geary's C
 
-[**Q: The following statistical tests give me errors**]{.ul}
-
 ```{r}
 all_rates %>%
-  pull(avg_household_vio_rate) %>%
+  na.omit() %>% 
+  pull(avg_household_ss60_rate) %>%
   as.vector()%>%
-  na.omit(all_rates) %>% 
   geary.test(., LMsoa_lw, zero.policy = TRUE)
 
 ```
+
 
 ### General G
 
 ```{r eval=FALSE, include=FALSE}
 all_rates %>%
-  na.omit(all_rates) %>% 
   pull(ss60_arrest_rate) %>%
   as.vector()%>%
   globalG.test(., LMsoa_lw, zero.policy = TRUE)
+
+all_rates %>%
+  pull(avg_household_vio_rate) %>%
+  as.vector()%>%
+  na.omit(all_rates) %>% 
+  geary.test(., LMsoa_lw, zero.policy = TRUE)
 ```
 
 ### Local Moran's I
 
 ```{r eval=FALSE, include=FALSE}
-test <- all_rates %>%
-  na.omit(all_rates) %>% 
+cal_loc_moran <- all_rates %>%
   pull(avg_household_ss60_rate) %>%
   as.vector()%>%
-  localmoran(., LMsoa_lw)%>%
+  na.omit(all_rates) %>% 
+  localmoran(., LMsoa_lw, zero.policy = TRUE)%>%
   as_tibble()
-```
 
+```
 
 ## Clustering
 
-```{r}
+Detailed tutorial found at <https://uc-r.github.io/hc_clustering>
+
+```{r message=FALSE}
 library(tidyverse)  # data manipulation
 library(cluster)    # clustering algorithms
 library(factoextra) # clustering visualization
-library(dendextend) # for comparing two dendrograms
 
 df <- subset(all_rates,select=-msoa11cd) %>% 
   st_drop_geometry() %>% 
   scale(.)
 
-#rownames(df) <- df$msoa11cd 
 ```
 
 ### Agglomerative Hierarchical Clustering
 
+To determine which clustering method I choose use, agnes function can calculate the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure).
 ```{r}
 # methods to assess
 m <- c( "average", "single", "complete", "ward")
@@ -899,6 +933,8 @@ ac <- function(x) {
 map_dbl(m, ac) 
 ```
 
+Clearly, Ward method can identify the strongest clustering structures.
+
 ```{r}
 # Dissimilarity matrix
 d <- dist(df, method = "euclidean")
@@ -908,12 +944,18 @@ hc <- hclust(d, method = "ward.D2")
 
 # Plot the obtained dendrogram
 plot(hc, hang=-1, labels=FALSE)
+```
 
-# Find the optimal cluster number 
+To determine the optimal cluster number:
+1. Elbow Method
+2. Average Silhouette Method (haven't explored yet)
+
+```{r}
+# use Elbow Method first  
 library(factoextra)
 fviz_nbclust(df, FUN = hcut, method = "wss")
 
-# Plot the desired number of clusters 
+# k=5
 plot(hc, cex = 0.6, hang=-1, labels=FALSE)
 rect.hclust(hc, k = 5, border = 2:5)
 ```
@@ -926,22 +968,39 @@ sub_grp <- cutree(hc, k = 5)
 table(sub_grp)
 
 # assign clusters back to rate df
-df1 <- subset(all_rates) %>% 
+df_cluster <- subset(all_rates) %>% 
   mutate(cluster=sub_grp)
 ```
 
-```{r message=FALSE}
-# groupby cluster and see the statistical characteristics
-df2 <- df1%>% 
+We can see cluster 4 and 5 has very few obervations so the density of clusters is very different.
+
+### Explore cluster characteristics
+
+```{r message=False, warning=False, results='asis'}
+df_stats <- df_cluster%>% 
   st_drop_geometry() %>% 
   group_by(cluster) %>% 
   na.omit(.) %>% 
-  summarise(across(economic_activity_2011_census_unemployment_rate:ss60_other_ethnicity_rate, median))
-df2
+  summarise(across(economic_activity_2011_census_unemployment_rate:ss60_other_ethnicity_rate, median)) %>% 
+  dplyr::rename(unemploymentR = "economic_activity_2011_census_unemployment_rate",
+                violeceR = "avg_household_vio_rate",
+                total_ss60R = "avg_household_ss60_rate",
+                black_ss60R = "ss60_black_rate",
+                white_ss60R = "ss60_white_rate",
+                asian_ss60R = "ss60_asian_rate",
+                other_ss60R = "ss60_other_ethnicity_rate")
+
+kable(df_stats, caption = 'Cluster Statistics')
+```
+Make Facet Grid (Looks like this which is made by seaborn in python)
+```{r echo = FALSE}
+knitr::include_graphics("/Users/yingchen/Documents2/CASA/spatial_capture/final project/Output/sample_in_python.jpg")
 ```
 
+Plot the cluster map 
+
 ```{r}
-tm_shape(df1) + 
+tm_shape(df_cluster) + 
   tm_fill("cluster",
           palette = "viridis")
 ```
