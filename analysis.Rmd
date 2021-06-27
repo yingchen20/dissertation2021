@@ -111,12 +111,12 @@ Create a table counting crime numbers for each type.
 
 ```{r message=False, warning=False, results='asis'}
 library(knitr)
-crimeTypes <- crime_london %>% 
+crime_london %>% 
   group_by(crime_type) %>% 
   summarise(., count=n(),) %>%
   arrange(desc(count)) %>% 
-  st_drop_geometry()
-kable(crimeTypes, caption = 'London crimes by types from April 2019 to April 2021')
+  st_drop_geometry() %>% 
+  kable(., caption = 'London crimes by types from April 2019 to April 2021')
 ```
 
 I am interested in comparing violent crimes with stop and searches under one particular legislation (section 60) because section 60 is specifically targeted for violent crimes.
@@ -126,15 +126,15 @@ violence_london <- crime_london %>%
   filter(., crime_type=='Violence and sexual offences') 
 ```
 
-What are the most common outcome for violent crimes in London?
+What are the most common outcome for violent crimes in London? 
 
 ```{r message=False, warning=False, results='asis'}
-Tb_violenceOutcome <- violence_london %>% 
+violence_london %>% 
   group_by(last_outcome_category) %>% 
   summarise(., count=n(),) %>%
   arrange(desc(count)) %>% 
-  st_drop_geometry()
-kable(Tb_violenceOutcome, caption = 'London violent crimes by outcomes from April 2019 to April 2021')
+  st_drop_geometry() %>% 
+  kable(., caption = 'London violent crimes by outcomes from April 2019 to April 2021')
 ```
 
 I want to count the number of violent crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names. (*later to break down into different years*)
@@ -142,12 +142,12 @@ I want to count the number of violent crimes by boroughs but they record crimes 
 ```{r message=False, warning=False, results='asis'}
 violence_london$boro_name = substr(violence_london$lsoa_name,1,nchar(violence_london$lsoa_name)-4)
 
-Tb_violenceBoro <- violence_london %>% 
+violence_london %>% 
   group_by(boro_name) %>% 
   summarise(., count=n(),) %>% 
   arrange(desc(count)) %>% 
-  st_drop_geometry()
-kable(Tb_violenceBoro, caption = 'London violent crimes by boroughs from April 2019 to April 2021')
+  st_drop_geometry() %>% 
+  kable(., caption = 'London violent crimes by boroughs from April 2019 to April 2021')
 ```
 
 ## Understand stop and search (S&S) data
@@ -180,12 +180,12 @@ ss_london <- ss[boroMap,]
 What are the common legislation and search object during S&S?
 
 ```{r message=False, warning=False, results='asis'}
-Tb_ssLegis <- ss_london %>% 
+ss_london %>% 
   group_by(legislation, object_of_search) %>% 
   summarise(., count=n(),) %>%
   arrange(desc(count)) %>% 
-  st_drop_geometry()
-kable(Tb_ssLegis, caption = 'London S&S by legislation and search objects from April 2019 to April 2021')
+  st_drop_geometry() %>% 
+  kable(., caption = 'London S&S by legislation and search objects from April 2019 to April 2021')
 ```
 
 -   The Criminal Justice and Public Order 1994 (section 60) aims to reduce violence in London. From April 2014, the UK government implements the Best Use of Stop and Search Scheme (BUSSS) and it gives more police power to stop and search people without having reasonable grounds for suspicion if violence is anticipated by police. The main purpose of the scheme is to prevent violent crimes (such as knife crime) before it happens.
@@ -199,25 +199,14 @@ ss60_london <- ss_london %>%
 What are the most common ethnicity of people being S&S for potential violence? (*later to break down into different years*)
 
 ```{r message=False, warning=False, results='asis'}
-Tb_ss60Outcome <- ss60_london %>% 
-  group_by(officer_defined_ethnicity) %>% 
+ss60_london %>% 
+  group_by(outcome, officer_defined_ethnicity) %>% 
   summarise(., count=n(),) %>%
-  arrange(desc(count)) %>% 
-  st_drop_geometry()
-kable(Tb_ss60Outcome, caption = 'Ethnicities for people being S&S from April 2019 to April 2021')
+  arrange(outcome, officer_defined_ethnicity, desc(count)) %>% 
+  st_drop_geometry() %>% 
+  kable(., caption = 'Ethnicities for people being S&S from April 2019 to April 2021')
 ```
 
-What are the common ethnicity of a person being arrest by S&S? Any change in trend? (*later to break down into different years*)
-
-```{r message=False, warning=False, results='asis'}
-Tb_ss60Arrest <- ss60_london %>% 
-  filter(outcome == "Arrest") %>% 
-  group_by(officer_defined_ethnicity) %>% 
-  summarise(., count=n(),) %>%
-  arrange(desc(count)) %>% 
-  st_drop_geometry()
-kable(Tb_ss60Arrest, caption = 'Ethnicities for people being arrested for violating section 60 from April 2019 to April 2021')
-```
 
 ## Simple point distribution
 
@@ -441,6 +430,90 @@ dbPlot_b_KNN
 ```
 It gives us 2 unique clusters.
 
+### Towars White People
+
+```{r message=FALSE, warning=FALSE}
+ss60_white<- ss60_london %>% 
+  filter(officer_defined_ethnicity == "White") 
+
+ss60_whiteSP <- ss60_white %>%  
+  as(., 'Spatial') 
+
+ss60_whitePPP <- ppp(x=ss60_whiteSP@coords[,1],
+                     y=ss60_whiteSP@coords[,2],
+                     window=window)
+
+ss60_whitePoints<- ss60_whiteSP %>%
+  geometry(.)%>%
+  as.data.frame()
+```
+
+1. Ripley's K method:
+
+```{r message=FALSE, warning=FALSE}
+ss60_whitePPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,1500)) %>% 
+  abline(v = 750, col = "blue", lty = 2)
+```
+
+```{r}
+db_w <- ss60_whitePoints %>%
+  fpc::dbscan(.,eps = 750, MinPts = 50)
+
+theme_set(theme_minimal())
+
+dbPlot_w <- fviz_cluster(db_w, ss60_whitePoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=750, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot_w
+```
+
+2. KNNDistance method:
+
+```{r}
+ss60_whitePoints %>%
+  dbscan::kNNdistplot(.,k=50) %>% 
+  title(main="50-nearst Neighbor Distance Plot \n (MinPts=50, knee=3000)") %>% 
+  abline(h = 3000, col = "red", lty = 2)
+```
+
+```{r}
+db_w_KNN <- ss60_whitePoints %>%
+  fpc::dbscan(.,eps = 3000, MinPts = 50)
+
+theme_set(theme_minimal())
+
+dbPlot_w_KNN <- fviz_cluster(db_w_KNN, ss60_whitePoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=3000, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot_w_KNN
+```
+
 
 ### Towards Asian people
 
@@ -617,6 +690,41 @@ autoplot.OpenStreetMap(basemap_bng) +
                fill = "red") +
   theme(legend.position = "none") +
   ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Black People")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+```
+
+For white people?
+
+```{r}
+# add (x,y) coordinate and clusters to new columns  
+ss60_white <- sfc_as_cols(ss60_white, c("longitude", "latitude")) %>% 
+  mutate(dbcluster=db_w$cluster)  # here I chose the Ripley's K method of generating clusters 
+
+# create convex hull polygons to wrap around the points in our clusters
+hulls_w <- ss60_white %>%
+  group_by(dbcluster) %>%
+  dplyr::mutate(hull = 1:n(),
+                hull = factor(hull, chull(longitude, latitude)))%>%
+  arrange(hull) %>% 
+  filter(dbcluster >=1) # since dbcluster < 1 are noises
+
+
+# plot
+autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=ss60_white, 
+             aes(longitude,latitude, 
+                 colour=dbcluster,
+                 fill=dbcluster),size=0.3)+
+  geom_polygon(data = hulls_w, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "red") +
+  theme(legend.position = "none") +
+  ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to White People")+
   theme(plot.title=element_text(hjust = 0.5, face="bold"))+
   labs(caption = "Copyright OpenStreetMap contributors",
        x="Meter",y="Meter")
@@ -966,18 +1074,20 @@ sub_grp <- cutree(hc, k = 5)
 
 # Number of members in each cluster
 table(sub_grp)
-
-# assign clusters back to rate df
-df_cluster <- subset(all_rates) %>% 
-  mutate(cluster=sub_grp)
 ```
 
 We can see cluster 4 and 5 has very few obervations so the density of clusters is very different.
 
 ### Explore cluster characteristics
 
+[**Q: Do I need to scale df_cluster before taking the median? **]
+
 ```{r message=False, warning=False, results='asis'}
-df_stats <- df_cluster%>% 
+# assign clusters back to rate df
+df_cluster <- subset(all_rates) %>% 
+  mutate(cluster=sub_grp)
+
+df_cluster%>% 
   st_drop_geometry() %>% 
   group_by(cluster) %>% 
   na.omit(.) %>% 
@@ -988,9 +1098,8 @@ df_stats <- df_cluster%>%
                 black_ss60R = "ss60_black_rate",
                 white_ss60R = "ss60_white_rate",
                 asian_ss60R = "ss60_asian_rate",
-                other_ss60R = "ss60_other_ethnicity_rate")
-
-kable(df_stats, caption = 'Cluster Statistics')
+                other_ss60R = "ss60_other_ethnicity_rate") %>% 
+  kable(., caption = 'Cluster Statistics')
 ```
 Make Facet Grid (Looks like this which is made by seaborn in python)
 ```{r echo = FALSE}
@@ -1001,8 +1110,7 @@ Plot the cluster map
 
 ```{r}
 tm_shape(df_cluster) + 
-  tm_fill("cluster",
-          palette = "viridis")
+  tm_fill("cluster", palette = "viridis")
 ```
 
 
