@@ -82,8 +82,10 @@ list_data_paths <- function(pattern, rec){
 }
 ```
 
+Use the function above and search for all crime data (ended with metropolitan-street.csv) in my local folder.
+
 ```{r echo=TRUE, message = FALSE}
-setwd("/Users/yingchen/Documents2/CASA/dissertation/london stop and search/data/crime_data")
+setwd("/Users/yingchen/Documents2/CASA/dissertation/dissertation2021/data/crime_data")
 crime_list <- list_data_paths("\\-metropolitan-street.csv$",FALSE) 
 
 crime <- crime_list %>% 
@@ -105,7 +107,7 @@ crime<- crime %>%
 crime_london <- crime[boroMap,]
 ```
 
-Create a table showing the number of crimes for each type.
+Create a table counting crime numbers for each type.
 
 ```{r message=False, warning=False, results='asis'}
 library(knitr)
@@ -117,7 +119,7 @@ crimeTypes <- crime_london %>%
 kable(crimeTypes, caption = 'London crimes by types from April 2019 to April 2021')
 ```
 
-I am interested in comparing violent crimes with stop and searches under one particular legislation (section 60), therefore I need to select violent crimes from all crimes first.
+I am interested in comparing violent crimes with stop and searches under one particular legislation (section 60) because section 60 is specifically targeted for violent crimes.
 
 ```{r}
 violence_london <- crime_london %>% 
@@ -135,7 +137,7 @@ Tb_violenceOutcome <- violence_london %>%
 kable(Tb_violenceOutcome, caption = 'London violent crimes by outcomes from April 2019 to April 2021')
 ```
 
-I want to count the number of violent crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names.
+I want to count the number of violent crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names. (*later to break down into different years*)
 
 ```{r message=False, warning=False, results='asis'}
 violence_london$boro_name = substr(violence_london$lsoa_name,1,nchar(violence_london$lsoa_name)-4)
@@ -150,16 +152,18 @@ kable(Tb_violenceBoro, caption = 'London violent crimes by boroughs from April 2
 
 ## Understand stop and search (S&S) data
 
-Clean names, remove duplicated records and select points within London boroughs.
+Search for stop and search data (ends with -metropolitan-stop-and-search.csv).
 
 ```{r echo=TRUE, message = FALSE}
-setwd("/Users/yingchen/Documents2/CASA/dissertation/london stop and search/data/crime_data")
+setwd("/Users/yingchen/Documents2/CASA/dissertation/dissertation2021/data/crime_data")
 ss_list <- list_data_paths("\\-metropolitan-stop-and-search.csv$",FALSE) 
 
 ss <- ss_list %>% 
   lapply(read_csv) %>% 
   bind_rows
 ```
+
+clean names, remove duplicated records and select points within London boroughs.
 
 ```{r message=FALSE, warning=False}
 ss <- ss %>% 
@@ -184,14 +188,15 @@ Tb_ssLegis <- ss_london %>%
 kable(Tb_ssLegis, caption = 'London S&S by legislation and search objects from April 2019 to April 2021')
 ```
 
-The Criminal Justice and Public Order 1994 (section 60) aims to reduce violence in London. From April 2014, the UK government implements the Best Use of Stop and Search Scheme (BUSSS) and it gives more police power to stop and search people without having reasonable grounds for suspicion if violence is anticipated by police. The main purpose of the scheme is to prevent violent crimes (such as knife crime) before it happens. Therefore, comparing the distribution of section 60 usage and actual violent crime locations can help understand whether S&S is an effective way of deterring violent crimes.
+-   The Criminal Justice and Public Order 1994 (section 60) aims to reduce violence in London. From April 2014, the UK government implements the Best Use of Stop and Search Scheme (BUSSS) and it gives more police power to stop and search people without having reasonable grounds for suspicion if violence is anticipated by police. The main purpose of the scheme is to prevent violent crimes (such as knife crime) before it happens.
+-   Therefore, comparing the police usage of section 60 in terms of their locations, ethnicity of the person being S&S, time of a day, season of a year, and actual violent crime locationns within MSOA, LSOA or ward can help understand whether S&S is an effective way of deterring violent crimes at local level.
 
 ```{r}
 ss60_london <- ss_london %>% 
   filter(legislation == "Criminal Justice and Public Order Act 1994 (section 60)") 
 ```
 
-What are the most common ethnicity of people being S&S for potential violence? Any change in trend of years?
+What are the most common ethnicity of people being S&S for potential violence? (*later to break down into different years*)
 
 ```{r message=False, warning=False, results='asis'}
 Tb_ss60Outcome <- ss60_london %>% 
@@ -202,7 +207,7 @@ Tb_ss60Outcome <- ss60_london %>%
 kable(Tb_ss60Outcome, caption = 'Ethnicities for people being S&S from April 2019 to April 2021')
 ```
 
-What are the common ethnicity of a person being arrest by S&S? Any change in trend?
+What are the common ethnicity of a person being arrest by S&S? Any change in trend? (*later to break down into different years*)
 
 ```{r message=False, warning=False, results='asis'}
 Tb_ss60Arrest <- ss60_london %>% 
@@ -238,6 +243,360 @@ tm_shape(msoaMap) +
   tm_layout(main.title= "S&S (section 60) London April 2019 to April 2021", 
             main.title.size=1)
 ```
+
+## Density plot
+
+```{r eval=FALSE, include=FALSE}
+# function to transform geometry to (x,y) coordinates from 
+# https://maczokni.github.io/crimemapping_textbook_bookdown/more-on-thematic-maps.html
+sfc_as_cols <- function(x, names = c("x","y")) {
+  stopifnot(inherits(x,"sf") && inherits(sf::st_geometry(x),"sfc_POINT"))
+  ret <- sf::st_coordinates(x)
+  ret <- tibble::as_tibble(ret)
+  stopifnot(length(names) == ncol(ret))
+  x <- x[ , !names(x) %in% names]
+  ret <- setNames(ret,names)
+  dplyr::bind_cols(x,ret)
+}
+ss60_london <- sfc_as_cols(ss60_london, c("longitude", "latitude"))
+
+
+ggplot(ss60_london, aes(x = longitude, y = latitude))+
+  ggtitle("S&S(s60) Density London Apr 2019 to Apr 2021")+
+  theme(plot.title=element_text(hjust = 0.5))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Longitude",y="Latitude")+
+  annotation_map_tile(zoom=2) + 
+  stat_density2d(aes(fill = ..level.., 
+                     alpha = ..level..), 
+                 geom = "polygon") +  
+  scale_fill_gradientn(colours = c("white","red"), 
+                       name = "Density")
+```
+
+
+## dbscan
+DBSCAN requires two parameters: 
+1. Epsilon -  the radius within which the algorithm with search for clusters 
+2. MinPts - the minimum number of points that should be considered a cluster.
+
+Two ways to determine Epsilon: 
+1. Ripley's K - where K values above the Poisson distribution indicates areas of clustering; needs to find the K values' cutoff between above and below the Poisson distribution. 
+2. KNNDistance - it is the distance of each point to its k-th nearest neighbor; needs to find a knee in the plot. "The idea behind this heuristic is that points located inside of clusters will have a small k-nearest neighbor distance, because they are close to other points in the same cluster, while noise points are more isolated and will have a rather large kNN distance (Hahsler et al., 2019).
+
+Potential way to determine MinPts:
+The rule of thumb for setting minPts is to use at least the number of dimensions of the dataset plus one (Hahsler et al., 2019). However, by setting MinPts = 3 (which is what Hahsler et al suggest) it results in 229 unique cluster for all S&S (s60) points, which is too many. 
+
+### All S&S (s60)
+```{r message=FALSE, warning=FALSE}
+ss60_londonSP <- ss60_london %>%
+  as(., 'Spatial') 
+
+ss60_londonPoints <- ss60_londonSP %>%
+  geometry(.)%>%
+  as.data.frame()
+
+window <- as.owin(msoaMap)
+ss60_londonPPP <- ppp(x=ss60_londonSP@coords[,1],
+                     y=ss60_londonSP@coords[,2],
+                     window=window)
+```
+
+1. Ripley's K method
+```{r message=FALSE}
+ss60_londonPPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,1500)) %>% 
+  abline(v = 450, col = "blue", lty = 2)
+```
+From the output graph, we can see that up until distances of around 450 meters, S&S(s60) appear to be clustered in London MSOAs and the largest bulge in the graph at around 400 meters Increasing the distance beyond 450 meters leads the distribution becomes random and dispersed.
+Therefore, setting eps to 400m or 450m is reasonable.
+
+```{r warning=False, message=False}
+db <- ss60_londonPoints %>%
+  fpc::dbscan(.,eps = 450, MinPts = 50)  # 400m radius of at least 50 S&S(s60)
+
+theme_set(theme_minimal())
+
+dbPlot <- fviz_cluster(db, ss60_londonPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls All S&S (s60) \n (ep=450, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot
+```
+It gives us 33 unique clusters. 
+The graph tells us this high intensity (450 meters radius --> 50 S&S for violence) is not widespread the country, only shown in few neighborhoods at Northen London.
+
+
+2. KNNDistance method:
+
+```{r message=FALSE, warning=FALSE}
+ss60_londonPoints %>%
+  dbscan::kNNdistplot(.,k=50) %>% 
+  title(main="50-nearst Neighbor Distance Plot \n (MinPts=50, knee=1600)") %>% 
+  abline(h = 1600, col = "red", lty = 2)
+```
+
+```{r}
+db_KNN <- ss60_londonPoints %>%
+  fpc::dbscan(.,eps = 1600, MinPts = 50)
+
+theme_set(theme_minimal())
+
+dbPlot_KNN <- fviz_cluster(db_KNN, ss60_londonPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls All S&S (s60) \n (ep=1600, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot_KNN
+```
+It gives us 5 unique clusters.
+This graph tells us if we increase the neighborhood radius range to 1.6 km <more explaination needed>  
+
+
+
+### Towards Black people
+
+Observations: 
+1. if setting the eps as Ripley's K test suggests, the number is small and resulting in some small clusters with very few points within. 
+2. if setting as kNNdistplot suggests, the "knee" is usually quite large and it will give us a large cluster + some small clusters + isolated noises. 
+
+```{r message=FALSE, warning=FALSE}
+ss60_blackSP <- ss60_london %>% 
+  filter(officer_defined_ethnicity == "Black") %>% 
+  as(., 'Spatial') 
+
+ss60_blackPPP <- ppp(x=ss60_blackSP@coords[,1],
+                     y=ss60_blackSP@coords[,2],
+                     window=window)
+
+ss60_blackPoints<- ss60_blackSP %>%
+  geometry(.)%>%
+  as.data.frame()
+```
+
+1. Choose Ripley's K method to select suitable parameters:
+
+```{r message=FALSE, warning=FALSE}
+ss60_blackPPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,1500)) %>% 
+  abline(v = 450, col = "blue", lty = 2)
+```
+
+Plot:
+```{r}
+db_b <- ss60_blackPoints %>%
+  fpc::dbscan(.,eps = 450, MinPts = 50)
+
+theme_set(theme_minimal())
+
+dbPlot_b <- fviz_cluster(db_b, ss60_blackPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=450, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot_b
+```
+It gives us 14 unique clusters. The distribuion is very like the previous counting all S&S. 
+
+
+2. Choose KNN distance method to select suitable parameters:
+
+```{r}
+ss60_blackPoints %>%
+  dbscan::kNNdistplot(.,k=50) %>% 
+  title(main="50-nearst Neighbor Distance Plot \n (MinPts=50, knee=2000)") %>% 
+  abline(h = 2000, col = "red", lty = 2)
+```
+plot:
+```{r}
+db_b_KNN <- ss60_blackPoints %>%
+  fpc::dbscan(.,eps = 2000, MinPts = 50)
+
+theme_set(theme_minimal())
+
+dbPlot_b_KNN <- fviz_cluster(db_b_KNN, ss60_blackPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=2000, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot_b_KNN
+```
+It gives us 2 unique clusters.
+
+
+### Towards Asian people
+
+```{r message=FALSE, warning=FALSE}
+ss60_asian <- ss60_london %>% 
+  filter(officer_defined_ethnicity == "Asian") 
+
+ss60_asianSP <- ss60_asian %>% 
+  as(., 'Spatial') 
+
+ss60_asianPPP <- ppp(x=ss60_asianSP@coords[,1],
+                     y=ss60_asianSP@coords[,2],
+                     window=window)
+
+ss60_asianPoints<- ss60_asianSP %>%
+  geometry(.)%>%
+  as.data.frame()
+```
+
+1. Ripley's K:
+
+```{r message=FALSE, warning=FALSE}
+ss60_asianPPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,1500)) %>% 
+  abline(v = 500, col = "blue", lty = 2)
+```
+
+```{r}
+db_a <- ss60_asianPoints %>%
+  fpc::dbscan(.,eps = 500, MinPts = 50)
+
+theme_set(theme_minimal())
+
+dbPlot_a <- fviz_cluster(db_a, ss60_asianPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=500, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot_a
+```
+
+
+2. KNNDistance
+
+```{r}
+ss60_asianPoints %>%
+  dbscan::kNNdistplot(.,k=50) %>% 
+  title(main="50-nearst Neighbor Distance Plot \n (MinPts=50, knee=4000)") %>% 
+  abline(h = 4000, col = "red", lty = 2)
+```
+
+```{r}
+db_a_KNN <- ss60_asianPoints %>%
+  fpc::dbscan(.,eps = 4000, MinPts = 50)
+
+theme_set(theme_minimal())
+
+dbPlot_a_KNN <- fviz_cluster(db_a_KNN, ss60_asianPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=4000, MinPts=50)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+dbPlot_a_KNN
+```
+
+```{r}
+ss60_asian <- ss60_asian %>% 
+  mutate(dbcluster=db_a$cluster)
+
+hulls_a <- ss60_asian %>%
+  group_by(dbcluster) %>%
+  dplyr::mutate(hull = 1:n(),
+                hull = factor(hull, chull(longitude, latitude)))%>%
+  arrange(hull)
+
+hulls_a <- hulls_a %>%
+  filter(dbcluster >=1)
+
+# add a basemap
+LondonBB <- boroMap %>%
+  st_transform(., 4326)%>%
+  st_bbox()
+
+library(OpenStreetMap)
+basemap <- OpenStreetMap::openmap(c(51.2867602,-0.5103751),c(51.6918741,0.3340156), 
+                                  zoom=NULL,
+                                  "stamen-toner")
+
+# convert the basemap to British National Grid
+basemap_bng <- openproj(basemap, projection="+init=epsg:27700")
+
+# plot
+autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=ss60_asian, 
+             aes(longitude,latitude, 
+                 fill=dbcluster),
+             size=0.3)+
+  geom_polygon(data = hulls_a, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "red") +
+  theme(legend.position = "none") +
+  ggtitle("DBSCAN-Extracted Cluster")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+```
+
 
 ## st-dbscan (DISCUSSION)
 
@@ -509,6 +868,7 @@ test <- all_rates %>%
   as_tibble()
 ```
 
+
 ## Clustering
 
 ```{r}
@@ -517,12 +877,11 @@ library(cluster)    # clustering algorithms
 library(factoextra) # clustering visualization
 library(dendextend) # for comparing two dendrograms
 
-df <- subset(all_rates) %>% 
-  st_drop_geometry()
-
-rownames(df) <- df$msoa11cd 
-df <- subset(df, select=-msoa11cd) %>% 
+df <- subset(all_rates,select=-msoa11cd) %>% 
+  st_drop_geometry() %>% 
   scale(.)
+
+#rownames(df) <- df$msoa11cd 
 ```
 
 ### Agglomerative Hierarchical Clustering
@@ -544,60 +903,47 @@ map_dbl(m, ac)
 # Dissimilarity matrix
 d <- dist(df, method = "euclidean")
 
-# Hierarchical clustering using Complete Linkage
-hc1 <- hclust(d, method = "ward")
+# Hierarchical clustering using Ward Linkage
+hc <- hclust(d, method = "ward.D2")
 
 # Plot the obtained dendrogram
-plot(hc1, cex = 0.6, hang = -1)
+plot(hc, hang=-1, labels=FALSE)
 
-# Compute with agnes
-hc2 <- agnes(df, method = "complete")
-# Agglomerative coefficient
-hc2$ac
-```
+# Find the optimal cluster number 
+library(factoextra)
+fviz_nbclust(df, FUN = hcut, method = "wss")
 
-### Divisive Hierarchical Clustering
-
-```{r}
-# compute divisive hierarchical clustering
-hc4 <- diana(df)
-
-# Divise coefficient; amount of clustering structure found
-hc4$dc
-
-# plot dendrogram
-pltree(hc4, cex = 0.6, hang = -1, main = "Dendrogram of diana")
+# Plot the desired number of clusters 
+plot(hc, cex = 0.6, hang=-1, labels=FALSE)
+rect.hclust(hc, k = 5, border = 2:5)
 ```
 
 ```{r}
-# Ward's method
-hc5 <- hclust(d, method = "ward.D2" )
-
-# Cut tree into 6 groups
-sub_grp <- cutree(hc5, k = 6)
+# Cut tree into 5 groups
+sub_grp <- cutree(hc, k = 5)
 
 # Number of members in each cluster
 table(sub_grp)
 
-```
-
-```{r}
-df2 <- data.frame(df) %>% 
+# assign clusters back to rate df
+df1 <- subset(all_rates) %>% 
   mutate(cluster=sub_grp)
-
-plot(hc5, cex = 0.6)
-rect.hclust(hc5, k = 6, border = 2:5)
 ```
 
-Find the optimal cluster number 
+```{r message=FALSE}
+# groupby cluster and see the statistical characteristics
+df2 <- df1%>% 
+  st_drop_geometry() %>% 
+  group_by(cluster) %>% 
+  na.omit(.) %>% 
+  summarise(across(economic_activity_2011_census_unemployment_rate:ss60_other_ethnicity_rate, median))
+df2
+```
 
 ```{r}
-library(factoextra)
-fviz_nbclust(df, FUN = hcut, method = "wss")
+tm_shape(df1) + 
+  tm_fill("cluster",
+          palette = "viridis")
 ```
-```{r}
-test <- na.omit(df2) 
-  
-fviz_cluster(list(data = df2, cluster = sub_grp))
-```
+
 
