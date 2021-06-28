@@ -275,7 +275,7 @@ Therefore, setting eps to 400m or 450m is reasonable.
 library(factoextra)
 
 db <- ss60_londonPoints %>%
-  fpc::dbscan(.,eps = 450, MinPts = 50)  # 400m radius of at least 50 S&S(s60)
+  fpc::dbscan(.,eps = 450, MinPts = 50)  # 450m radius of at least 50 S&S(s60) points
 
 theme_set(theme_minimal())
 
@@ -734,7 +734,7 @@ autoplot.OpenStreetMap(basemap_bng) +
 The 'stdbscanr' package and related functions was obtained from Dr.Gordon McDonald's github at 
 <https://github.com/gdmcdonald/stdbscanr>
 
-```{r eval=FALSE, include=FALSE}
+```{r message=FALSE}
 # install.packages("devtools")
 # devtools::install_github("gdmcdonald/stdbscanr")
 # install.packages("data.table")          
@@ -757,8 +757,8 @@ location_with_visits <-
                          x = "longitude", 
                          y = "latitude", 
                          t = "date",
-                         eps = 0.005,  
-                         eps_t = 1440, # = 1day
+                         eps = 0.005,  # 0.005 latitude/longitude ~ 500m either way in London
+                         eps_t = 1440, # 1440 minutes = 1day
                          minpts = 2)
 ```
 
@@ -1025,7 +1025,7 @@ Global Moran's I tells us almost all my variables have some clustering except fo
 
 ```{r}
 all_rates %>%
-  na.omit() %>% 
+  na.omit(.) %>% 
   pull(avg_household_ss60_rate) %>%
   as.vector()%>%
   geary.test(., LMsoa_lw, zero.policy = TRUE)
@@ -1060,7 +1060,7 @@ cal_loc_moran <- all_rates %>%
 
 ```
 
-## Clustering
+## Agglomerative Hierarchical Clustering
 
 Detailed tutorial found at <https://uc-r.github.io/hc_clustering>
 
@@ -1074,8 +1074,6 @@ df <- subset(all_rates,select=-msoa11cd) %>%
   scale(.)
 
 ```
-
-### Agglomerative Hierarchical Clustering
 
 To determine which clustering method I choose use, agnes function can calculate the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure).
 ```{r}
