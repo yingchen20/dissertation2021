@@ -731,20 +731,70 @@ autoplot.OpenStreetMap(basemap_bng) +
 ```
 
 ## st-dbscan 
+The 'stdbscanr' package and related functions was obtained from Dr.Gordon McDonald's github at 
+<https://github.com/gdmcdonald/stdbscanr>
 
 ```{r eval=FALSE, include=FALSE}
-#install.packages("devtools")
-#devtools::install_github("gdmcdonald/stdbscanr")
+# install.packages("devtools")
+# devtools::install_github("gdmcdonald/stdbscanr")
+# install.packages("data.table")          
+
+library("data.table")
 library(stdbscanr)
 
+ss60_londonTEST <- ss60_london[sample(nrow(ss60_london), 100), ] %>%  # random select 100 rows
+  st_transform(., 4326) %>% 
+  sfc_as_cols(., c("longitude", "latitude")) %>%    # convert geometry to coordinates
+  setDT(.) %>%     # convert to data.table
+  setkey(., date)  # sort by data 
+
+# add time intervals in minues between points
+ss60_londonTEST[,time_inc := as.numeric(date - shift(date), units = "mins")]
+
+# run st-dbscan
 location_with_visits <- 
-  get_clusters_from_data(df = ss60_londonDF,
+  get_clusters_from_data(df = ss60_londonTEST,
                          x = "longitude", 
                          y = "latitude", 
                          t = "date",
-                         eps = 5000,
-                         eps_t = 360,
-                         minpts = 1000)
+                         eps = 0.005,  
+                         eps_t = 1440, # = 1day
+                         minpts = 2)
+```
+
+```{r results='asis'}
+#Define a mode function to get the most common label
+mode <- function(x) { names(which.max(table(x))) }
+
+#data.table summary table of visits
+clusters <-                                   
+  location_with_visits[     
+    !is.na(cluster),                         
+    .(n = .N,                               
+      latitude = mean(latitude),            
+      longitude = mean(longitude), 
+      time_spent = sum(time_inc,na.rm = T),
+      ethnicity_label = mode(officer_defined_ethnicity)            
+    ),    
+    by=cluster] 
+
+kable(clusters, caption = "ST-DBSCAN Cluster Labels")
+```
+
+```{r message=FALSE}
+# order by time
+setkey(location_with_visits, date)
+
+library(leaflet)
+# plot on leaflet map
+leaflet(data = clusters) %>% 
+  addProviderTiles("OpenStreetMap.Mapnik") %>% 
+  addMarkers(popup = ~paste0("Time spent: ",round(time_spent/60, 1), " hours.<br>",
+                             "S&S Ethnicity Cluster ",cluster,": ",ethnicity_label,"<br>",
+                             "Counts: ", n)) %>% 
+  addPolylines(data = location_with_visits, 
+               lat = ~latitude, 
+               lng = ~longitude)
 ```
 
 ## Make continuous observations
