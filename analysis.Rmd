@@ -1025,11 +1025,11 @@ Global Moran's I tells us almost all my variables have some clustering except fo
 
 ```{r}
 all_rates %>%
-  na.omit(.) %>% 
+  na.omit(all_rates) %>%
   pull(avg_household_ss60_rate) %>%
   as.vector()%>%
+  na.omit(all_rates) %>% 
   geary.test(., LMsoa_lw, zero.policy = TRUE)
-
 ```
 
 
