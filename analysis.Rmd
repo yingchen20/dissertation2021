@@ -1161,4 +1161,5 @@ tm_shape(df_cluster) +
   tm_fill("cluster", palette = "viridis")
 ```
 
+## GWR
 
