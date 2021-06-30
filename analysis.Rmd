@@ -204,7 +204,7 @@ ss60_london %>%
   summarise(., count=n(),) %>%
   arrange(outcome, officer_defined_ethnicity, desc(count)) %>% 
   st_drop_geometry() %>% 
-  kable(., caption = 'Ethnicities for people being S&S from April 2019 to April 2021')
+  kable(., caption = 'Ethnicities for people being S&S (s60) from April 2019 to April 2021')
 ```
 
 
