@@ -126,7 +126,7 @@ violence_london <- crime_london %>%
   filter(., crime_type=='Violence and sexual offences') 
 ```
 
-What are the most common outcome for violent crimes in London? 
+What are the most common outcome for violent crimes in London?
 
 ```{r message=False, warning=False, results='asis'}
 violence_london %>% 
@@ -207,7 +207,6 @@ ss60_london %>%
   kable(., caption = 'Ethnicities for people being S&S (s60) from April 2019 to April 2021')
 ```
 
-
 ## Simple point distribution
 
 ```{r}
@@ -233,20 +232,16 @@ tm_shape(msoaMap) +
             main.title.size=1)
 ```
 
-
 ## dbscan
-DBSCAN requires two parameters: 
-1. Epsilon -  the radius within which the algorithm with search for clusters 
-2. MinPts - the minimum number of points that should be considered a cluster.
 
-Two ways to determine Epsilon: 
-1. Ripley's K - where K values above the Poisson distribution indicates areas of clustering; needs to find the K values' cutoff between above and below the Poisson distribution. 
-2. KNNDistance - it is the distance of each point to its k-th nearest neighbor; needs to find a knee in the plot. "The idea behind this heuristic is that points located inside of clusters will have a small k-nearest neighbor distance, because they are close to other points in the same cluster, while noise points are more isolated and will have a rather large kNN distance (Hahsler et al., 2019).
+DBSCAN requires two parameters: 1. Epsilon - the radius within which the algorithm with search for clusters 2. MinPts - the minimum number of points that should be considered a cluster.
 
-Potential way to determine MinPts:
-The rule of thumb for setting minPts is to use at least the number of dimensions of the dataset plus one (Hahsler et al., 2019). However, by setting MinPts = 3 (which is what Hahsler et al suggest) it results in 229 unique cluster for all S&S (s60) points, which is too many. 
+Two ways to determine Epsilon: 1. Ripley's K - where K values above the Poisson distribution indicates areas of clustering; needs to find the K values' cutoff between above and below the Poisson distribution. 2. KNNDistance - it is the distance of each point to its k-th nearest neighbor; needs to find a knee in the plot. "The idea behind this heuristic is that points located inside of clusters will have a small k-nearest neighbor distance, because they are close to other points in the same cluster, while noise points are more isolated and will have a rather large kNN distance (Hahsler et al., 2019).
+
+Potential way to determine MinPts: The rule of thumb for setting minPts is to use at least the number of dimensions of the dataset plus one (Hahsler et al., 2019). However, by setting MinPts = 3 (which is what Hahsler et al suggest) it results in 229 unique cluster for all S&S (s60) points, which is too many.
 
 ### All S&S (s60)
+
 ```{r message=FALSE, warning=FALSE}
 ss60_londonSP <- ss60_london %>%
   as(., 'Spatial') 
@@ -261,15 +256,16 @@ ss60_londonPPP <- ppp(x=ss60_londonSP@coords[,1],
                      window=window)
 ```
 
-1. Ripley's K method
+1.  Ripley's K method
+
 ```{r message=FALSE}
 ss60_londonPPP %>%
   Kest(., correction="border") %>%
   plot(xlim=c(0,1500)) %>% 
   abline(v = 450, col = "blue", lty = 2)
 ```
-From the output graph, we can see that up until distances of around 450 meters, S&S(s60) appear to be clustered in London MSOAs and the largest bulge in the graph at around 400 meters Increasing the distance beyond 450 meters leads the distribution becomes random and dispersed.
-Therefore, setting eps to 400m or 450m is reasonable.
+
+From the output graph, we can see that up until distances of around 450 meters, S&S(s60) appear to be clustered in London MSOAs and the largest bulge in the graph at around 400 meters Increasing the distance beyond 450 meters leads the distribution becomes random and dispersed. Therefore, setting eps to 400m or 450m is reasonable.
 
 ```{r warning=False, message=False}
 library(factoextra)
@@ -296,11 +292,10 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 
 dbPlot
 ```
-It gives us 33 unique clusters. 
-The graph tells us this high intensity (450 meters radius --> 50 S&S for violence) is not widespread the country, only shown in few neighborhoods at Northen London.
 
+It gives us 33 unique clusters. The graph tells us this high intensity (450 meters radius --\> 50 S&S for violence) is not widespread the country, only shown in few neighborhoods at Northen London.
 
-2. KNNDistance method:
+2.  KNNDistance method:
 
 ```{r message=FALSE, warning=FALSE}
 ss60_londonPoints %>%
@@ -332,16 +327,12 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 
 dbPlot_KNN
 ```
-It gives us 5 unique clusters.
-This graph tells us if we increase the neighborhood radius range to 1.6 km <more explaination needed>  
 
-
+It gives us 5 unique clusters. This graph tells us if we increase the neighborhood radius range to 1.6 km <more explaination needed>
 
 ### Towards Black people
 
-Observations: 
-1. if setting the eps as Ripley's K test suggests, the number is small and resulting in some small clusters with very few points within. 
-2. if setting as kNNdistplot suggests, the "knee" is usually quite large and it will give us a large cluster + some small clusters + isolated noises. 
+Observations: 1. if setting the eps as Ripley's K test suggests, the number is small and resulting in some small clusters with very few points within. 2. if setting as kNNdistplot suggests, the "knee" is usually quite large and it will give us a large cluster + some small clusters + isolated noises.
 
 ```{r message=FALSE, warning=FALSE}
 ss60_black <- ss60_london %>% 
@@ -359,7 +350,7 @@ ss60_blackPoints<- ss60_blackSP %>%
   as.data.frame()
 ```
 
-1. Choose Ripley's K method to select suitable parameters:
+1.  Choose Ripley's K method to select suitable parameters:
 
 ```{r message=FALSE, warning=FALSE}
 ss60_blackPPP %>%
@@ -369,6 +360,7 @@ ss60_blackPPP %>%
 ```
 
 Plot:
+
 ```{r}
 db_b <- ss60_blackPoints %>%
   fpc::dbscan(.,eps = 450, MinPts = 50)
@@ -392,10 +384,10 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 
 dbPlot_b
 ```
-It gives us 14 unique clusters. The distribuion is very like the previous counting all S&S. 
 
+It gives us 14 unique clusters. The distribuion is very like the previous counting all S&S.
 
-2. Choose KNN distance method to select suitable parameters:
+2.  Choose KNN distance method to select suitable parameters:
 
 ```{r}
 ss60_blackPoints %>%
@@ -405,6 +397,7 @@ ss60_blackPoints %>%
 ```
 
 plot:
+
 ```{r}
 db_b_KNN <- ss60_blackPoints %>%
   fpc::dbscan(.,eps = 2000, MinPts = 50)
@@ -428,6 +421,7 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 
 dbPlot_b_KNN
 ```
+
 It gives us 2 unique clusters.
 
 ### Towars White People
@@ -448,7 +442,7 @@ ss60_whitePoints<- ss60_whiteSP %>%
   as.data.frame()
 ```
 
-1. Ripley's K method:
+1.  Ripley's K method:
 
 ```{r message=FALSE, warning=FALSE}
 ss60_whitePPP %>%
@@ -481,7 +475,7 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 dbPlot_w
 ```
 
-2. KNNDistance method:
+2.  KNNDistance method:
 
 ```{r}
 ss60_whitePoints %>%
@@ -514,7 +508,6 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 dbPlot_w_KNN
 ```
 
-
 ### Towards Asian people
 
 ```{r message=FALSE, warning=FALSE}
@@ -533,7 +526,7 @@ ss60_asianPoints<- ss60_asianSP %>%
   as.data.frame()
 ```
 
-1. Ripley's K:
+1.  Ripley's K:
 
 ```{r message=FALSE, warning=FALSE}
 ss60_asianPPP %>%
@@ -566,8 +559,7 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 dbPlot_a
 ```
 
-
-2. KNNDistance
+2.  KNNDistance
 
 ```{r}
 ss60_asianPoints %>%
@@ -730,9 +722,9 @@ autoplot.OpenStreetMap(basemap_bng) +
        x="Meter",y="Meter")
 ```
 
-## st-dbscan 
-The 'stdbscanr' package and related functions was obtained from Dr.Gordon McDonald's github at 
-<https://github.com/gdmcdonald/stdbscanr>
+## st-dbscan
+
+The 'stdbscanr' package and related functions was obtained from Dr.Gordon McDonald's github at <https://github.com/gdmcdonald/stdbscanr>
 
 ```{r message=FALSE}
 # install.packages("devtools")
@@ -992,8 +984,7 @@ all_rates %>%
   moran.test(., LMsoa_lw, zero.policy = TRUE)
 ```
 
-Make a table of all statical results for all my variables 
-[**Q: How to turn the results into a dataframe with common column names (i.e. Moran I statistic, Expectation, Variance) and each variable's results fill in new rows? **]{.ul}
+Make a table of all statical results for all my variables [**Q: How to turn the results into a dataframe with common column names (i.e. Moran I statistic, Expectation, Variance) and each variable's results fill in new rows?**]{.ul}
 
 ```{r}
 # variables used for the test
@@ -1019,7 +1010,7 @@ datalist
 
 ```
 
-Global Moran's I tells us almost all my variables have some clustering except for arrest rate and ss60 for white people, showing police tend to randomly stop and search white people but intentionly or on purpose to search black and Asian people. 
+Global Moran's I tells us almost all my variables have some clustering except for arrest rate and ss60 for white people, showing police tend to randomly stop and search white people but intentionly or on purpose to search black and Asian people.
 
 ### Geary's C
 
@@ -1031,7 +1022,6 @@ all_rates %>%
   na.omit(all_rates) %>% 
   geary.test(., LMsoa_lw, zero.policy = TRUE)
 ```
-
 
 ### General G
 
@@ -1076,6 +1066,7 @@ df <- subset(all_rates,select=-msoa11cd) %>%
 ```
 
 To determine which clustering method I choose use, agnes function can calculate the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure).
+
 ```{r}
 # methods to assess
 m <- c( "average", "single", "complete", "ward")
@@ -1102,9 +1093,7 @@ hc <- hclust(d, method = "ward.D2")
 plot(hc, hang=-1, labels=FALSE)
 ```
 
-To determine the optimal cluster number:
-1. Elbow Method
-2. Average Silhouette Method (haven't explored yet)
+To determine the optimal cluster number: 1. Elbow Method 2. Average Silhouette Method (haven't explored yet)
 
 ```{r}
 # use Elbow Method first  
@@ -1128,7 +1117,7 @@ We can see cluster 4 and 5 has very few obervations so the density of clusters i
 
 ### Explore cluster characteristics
 
-[**Q: Do I need to scale df_cluster before taking the median? **]
+[**Q: Do I need to scale df_cluster before taking the median?** ]
 
 ```{r message=False, warning=False, results='asis'}
 # assign clusters back to rate df
@@ -1149,12 +1138,14 @@ df_cluster%>%
                 other_ss60R = "ss60_other_ethnicity_rate") %>% 
   kable(., caption = 'Cluster Statistics')
 ```
+
 Make Facet Grid (Looks like this which is made by seaborn in python)
+
 ```{r echo = FALSE}
 knitr::include_graphics("/Users/yingchen/Documents2/CASA/spatial_capture/final project/Output/sample_in_python.jpg")
 ```
 
-Plot the cluster map 
+Plot the cluster map
 
 ```{r}
 tm_shape(df_cluster) + 
@@ -1162,4 +1153,3 @@ tm_shape(df_cluster) +
 ```
 
 ## GWR
-
