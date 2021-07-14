@@ -275,7 +275,7 @@ db <- ss60_londonPoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot <- fviz_cluster(db, ss60_londonPoints, 
+fviz_cluster(db, ss60_londonPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -289,8 +289,6 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank())+
   coord_equal()
-
-dbPlot
 ```
 
 It gives us 33 unique clusters. The graph tells us this high intensity (450 meters radius --\> 50 S&S for violence) is not widespread the country, only shown in few neighborhoods at Northen London.
@@ -310,7 +308,7 @@ db_KNN <- ss60_londonPoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot_KNN <- fviz_cluster(db_KNN, ss60_londonPoints, 
+fviz_cluster(db_KNN, ss60_londonPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -324,13 +322,11 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank())+
   coord_equal()
-
-dbPlot_KNN
 ```
 
 It gives us 5 unique clusters. This graph tells us if we increase the neighborhood radius range to 1.6 km <more explaination needed>
 
-### Towards Black people
+### Black
 
 Observations: 1. if setting the eps as Ripley's K test suggests, the number is small and resulting in some small clusters with very few points within. 2. if setting as kNNdistplot suggests, the "knee" is usually quite large and it will give us a large cluster + some small clusters + isolated noises.
 
@@ -367,7 +363,7 @@ db_b <- ss60_blackPoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot_b <- fviz_cluster(db_b, ss60_blackPoints, 
+fviz_cluster(db_b, ss60_blackPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -382,7 +378,6 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.ticks.y=element_blank())+
   coord_equal()
 
-dbPlot_b
 ```
 
 It gives us 14 unique clusters. The distribuion is very like the previous counting all S&S.
@@ -404,7 +399,7 @@ db_b_KNN <- ss60_blackPoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot_b_KNN <- fviz_cluster(db_b_KNN, ss60_blackPoints, 
+fviz_cluster(db_b_KNN, ss60_blackPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -419,12 +414,11 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.ticks.y=element_blank())+
   coord_equal()
 
-dbPlot_b_KNN
 ```
 
 It gives us 2 unique clusters.
 
-### Towars White People
+### White
 
 ```{r message=FALSE, warning=FALSE}
 ss60_white<- ss60_london %>% 
@@ -457,7 +451,7 @@ db_w <- ss60_whitePoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot_w <- fviz_cluster(db_w, ss60_whitePoints, 
+fviz_cluster(db_w, ss60_whitePoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -472,7 +466,6 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.ticks.y=element_blank())+
   coord_equal()
 
-dbPlot_w
 ```
 
 2.  KNNDistance method:
@@ -490,7 +483,7 @@ db_w_KNN <- ss60_whitePoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot_w_KNN <- fviz_cluster(db_w_KNN, ss60_whitePoints, 
+fviz_cluster(db_w_KNN, ss60_whitePoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -505,10 +498,9 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.ticks.y=element_blank())+
   coord_equal()
 
-dbPlot_w_KNN
 ```
 
-### Towards Asian people
+### Asian
 
 ```{r message=FALSE, warning=FALSE}
 ss60_asian <- ss60_london %>% 
@@ -541,7 +533,7 @@ db_a <- ss60_asianPoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot_a <- fviz_cluster(db_a, ss60_asianPoints, 
+fviz_cluster(db_a, ss60_asianPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -556,7 +548,20 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.ticks.y=element_blank())+
   coord_equal()
 
-dbPlot_a
+```
+
+```{r}
+db_a2 <- ss60_asianPoints %>%
+  dbscan::optics(.,eps = 500, minPts = 50)
+
+plot(db_a2)
+
+test <- extractDBSCAN(db_a2, eps_cl = 400)
+plot(test)
+
+hullplot(ss60_asianPoints, test,
+         cex = TRUE,
+         main="OPTICS Cluster Hulls") 
 ```
 
 2.  KNNDistance
@@ -574,7 +579,7 @@ db_a_KNN <- ss60_asianPoints %>%
 
 theme_set(theme_minimal())
 
-dbPlot_a_KNN <- fviz_cluster(db_a_KNN, ss60_asianPoints, 
+fviz_cluster(db_a_KNN, ss60_asianPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -588,11 +593,9 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank())+
   coord_equal()
-
-dbPlot_a_KNN
 ```
 
-#### Plot cluster results on a openstreet basemap
+### With an openstreet basemap
 
 ```{r message=FALSE}
 library(OpenStreetMap)
@@ -634,22 +637,22 @@ basemap <- OpenStreetMap::openmap(c(51.2867602,-0.5103751),c(51.6918741,0.334015
 basemap_bng <- openproj(basemap, projection="+init=epsg:27700")
 
 # plot
-autoplot.OpenStreetMap(basemap_bng) + 
+dbPlotAsian <- autoplot.OpenStreetMap(basemap_bng) + 
   geom_point(data=ss60_asian, 
-             aes(longitude,latitude, 
-                 colour=dbcluster,
-                 fill=dbcluster),size=0.3)+
+             aes(longitude,latitude),
+             size=0.1, alpha=0.3) +
   geom_polygon(data = hulls_a, 
-               aes(longitude,latitude, 
+               aes(longitude,latitude,
                    group=dbcluster,
                    fill=dbcluster),
                alpha = 1,
-               fill = "red") +
+               fill="blueviolet") +
   theme(legend.position = "none") +
   ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Asian People")+
   theme(plot.title=element_text(hjust = 0.5, face="bold"))+
   labs(caption = "Copyright OpenStreetMap contributors",
        x="Meter",y="Meter")
+dbPlotAsian
 ```
 
 How about for the black people?
@@ -669,22 +672,22 @@ hulls_b <- ss60_black %>%
 
 
 # plot
-autoplot.OpenStreetMap(basemap_bng) + 
+dbPlotBlack <- autoplot.OpenStreetMap(basemap_bng) + 
   geom_point(data=ss60_black, 
-             aes(longitude,latitude, 
-                 colour=dbcluster,
-                 fill=dbcluster),size=0.3)+
+             aes(longitude,latitude),
+             size=0.1, alpha=0.3)+
   geom_polygon(data = hulls_b, 
                aes(longitude,latitude, 
                    group=dbcluster,
                    fill=dbcluster),
                alpha = 1,
-               fill = "red") +
+               fill = "tomato") +
   theme(legend.position = "none") +
   ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Black People")+
   theme(plot.title=element_text(hjust = 0.5, face="bold"))+
   labs(caption = "Copyright OpenStreetMap contributors",
        x="Meter",y="Meter")
+dbPlotBlack
 ```
 
 For white people?
@@ -704,22 +707,354 @@ hulls_w <- ss60_white %>%
 
 
 # plot
-autoplot.OpenStreetMap(basemap_bng) + 
+dbPlotWhite <- autoplot.OpenStreetMap(basemap_bng) + 
   geom_point(data=ss60_white, 
-             aes(longitude,latitude, 
-                 colour=dbcluster,
-                 fill=dbcluster),size=0.3)+
+             aes(longitude,latitude), 
+             size=0.1, alpha=0.3)+
   geom_polygon(data = hulls_w, 
                aes(longitude,latitude, 
                    group=dbcluster,
                    fill=dbcluster),
                alpha = 1,
-               fill = "red") +
+               fill = "seagreen") +
   theme(legend.position = "none") +
   ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to White People")+
   theme(plot.title=element_text(hjust = 0.5, face="bold"))+
   labs(caption = "Copyright OpenStreetMap contributors",
        x="Meter",y="Meter")
+dbPlotWhite
+```
+
+### Overlapping map
+
+```{r}
+dbplotALL <- autoplot.OpenStreetMap(basemap_bng) +
+  geom_point(data=ss60_asian, 
+             aes(longitude,latitude),
+             size=0.1, alpha=0.3) +
+  geom_polygon(data = hulls_a, 
+               aes(longitude,latitude,
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill="blueviolet") +
+  geom_point(data=ss60_black, 
+             aes(longitude,latitude),
+             size=0.1, alpha=0.3)+
+  geom_polygon(data = hulls_b, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "tomato") +
+  geom_point(data=ss60_white, 
+             aes(longitude,latitude), 
+             size=0.1, alpha=0.3)+
+  geom_polygon(data = hulls_w, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "seagreen") +
+  theme(legend.position = "none") +
+  ggtitle("ALL")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+dbplotALL
+```
+
+## dbscan - only arrest
+
+### Asian 
+
+```{r message=FALSE,warning=FALSE}
+ss60Arr_asian <- ss60_london %>% 
+  filter(officer_defined_ethnicity == "Asian") %>% 
+  filter(outcome == "Arrest")
+  
+ss60Arr_asianSP <- ss60Arr_asian %>% 
+  as(., 'Spatial') 
+
+ss60Arr_asianPPP <- ppp(x=ss60Arr_asianSP@coords[,1],
+                     y=ss60Arr_asianSP@coords[,2],
+                     window=window)
+
+ss60Arr_asianPPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,400)) %>% 
+  abline(v = 285, col = "blue", lty = 2)
+```
+
+```{r}
+ss60Arr_asianPoints<- ss60Arr_asianSP %>%
+  geometry(.)%>%
+  as.data.frame()
+
+db_aArr <- ss60Arr_asianPoints %>%
+  fpc::dbscan(.,eps = 285, MinPts = 2)
+
+theme_set(theme_minimal())
+
+fviz_cluster(db_aArr, ss60Arr_asianPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=400, MinPts=2)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+```
+
+```{r}
+db_aArr2 <- ss60Arr_asianPoints %>%
+  dbscan::optics(.,eps = 500, minPts = 3)
+
+plot(db_aArr2)
+
+test <- extractDBSCAN(db_aArr2, eps_cl = 400)
+plot(test)
+
+hullplot(ss60Arr_asianPoints, test,
+         cex = TRUE,
+         main="OPTICS Cluster Hulls")
+```
+
+```{r message=FALSE, warning=FALSE}
+# add (x,y) coordinate and clusters to new columns  
+ss60Arr_asian <- sfc_as_cols(ss60Arr_asian, c("longitude", "latitude")) %>% 
+  mutate(dbcluster=test$cluster)  
+
+# create convex hull polygons to wrap around the points in our clusters
+hulls_aArr <- ss60Arr_asian %>%
+  group_by(dbcluster) %>%
+  dplyr::mutate(hull = 1:n(),
+                hull = factor(hull, chull(longitude, latitude)))%>%
+  arrange(hull) %>% 
+  filter(dbcluster >=1) # since dbcluster < 1 are noises
+
+# plot
+dbPlotAsianArr <- autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=ss60Arr_asian, 
+             aes(longitude,latitude),
+             size=0.3, 
+             alpha=1)+
+  geom_polygon(data = hulls_aArr, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "tomato") +
+  theme(legend.position = "none") +
+  ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Asian People")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+dbPlotAsianArr
+```
+
+### Black People
+
+```{r message=False, warning=False}
+ss60Arr_black <- ss60_london %>% 
+  filter(officer_defined_ethnicity == "Black") %>% 
+  filter(outcome == "Arrest")
+  
+ss60Arr_blackSP <- ss60Arr_black %>% 
+  as(., 'Spatial') 
+
+ss60Arr_blackPPP <- ppp(x=ss60Arr_blackSP@coords[,1],
+                     y=ss60Arr_blackSP@coords[,2],
+                     window=window)
+
+ss60Arr_blackPPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,1000)) %>% 
+  abline(v = 400, col = "blue", lty = 2)
+```
+
+```{r message=FALSE, warning=FALSE}
+ss60Arr_blackPoints<- ss60Arr_blackSP %>%
+  geometry(.)%>%
+  as.data.frame()
+
+db_bArr <- ss60Arr_blackPoints %>%
+  fpc::dbscan(.,eps = 400, MinPts = 2)
+
+theme_set(theme_minimal())
+
+fviz_cluster(db_bArr, ss60Arr_blackPoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=400, MinPts=2)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+```
+
+```{r}
+# add (x,y) coordinate and clusters to new columns  
+ss60Arr_black <- sfc_as_cols(ss60Arr_black, c("longitude", "latitude")) %>% 
+  mutate(dbcluster=db_bArr$cluster)  
+
+# create convex hull polygons to wrap around the points in our clusters
+hulls_bArr <- ss60Arr_black %>%
+  group_by(dbcluster) %>%
+  dplyr::mutate(hull = 1:n(),
+                hull = factor(hull, chull(longitude, latitude)))%>%
+  arrange(hull) %>% 
+  filter(dbcluster >=1) # since dbcluster < 1 are noises
+
+# plot
+dbPlotBlackArr <- autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=ss60Arr_black, 
+             aes(longitude,latitude),
+             size=0.3, 
+             alpha=0.3)+
+  geom_polygon(data = hulls_bArr, 
+               aes(longitude,latitude,
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "tomato") +
+  theme(legend.position = "left") +
+  ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Black People")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+dbPlotBlackArr
+```
+
+### White
+
+```{r message=False, warning=False}
+ss60Arr_white <- ss60_london %>% 
+  filter(officer_defined_ethnicity == "White") %>% 
+  filter(outcome == "Arrest")
+  
+ss60Arr_whiteSP <- ss60Arr_white %>% 
+  as(., 'Spatial') 
+
+ss60Arr_whitePPP <- ppp(x=ss60Arr_whiteSP@coords[,1],
+                     y=ss60Arr_whiteSP@coords[,2],
+                     window=window)
+
+ss60Arr_whitePPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,600)) %>% 
+  abline(v = 330, col = "blue", lty = 2)
+```
+
+```{r message=FALSE, warning=FALSE}
+ss60Arr_whitePoints<- ss60Arr_whiteSP %>%
+  geometry(.)%>%
+  as.data.frame()
+
+db_wArr <- ss60Arr_whitePoints %>%
+  fpc::dbscan(.,eps = 330, MinPts = 2)
+
+theme_set(theme_minimal())
+
+fviz_cluster(db_wArr, ss60Arr_whitePoints, 
+                           geom = "point",
+                           stand = FALSE, labelsize = NA,
+                           outlier.pointsize = .8,
+                           #xlab="x", ylab="y",
+                           main="DBSCAN Cluster Hulls \n (ep=400, MinPts=2)") +
+theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  coord_equal()
+
+```
+
+```{r}
+# add (x,y) coordinate and clusters to new columns  
+ss60Arr_white <- sfc_as_cols(ss60Arr_white, c("longitude", "latitude")) %>% 
+  mutate(dbcluster=db_wArr$cluster)  
+
+# create convex hull polygons to wrap around the points in our clusters
+hulls_wArr <- ss60Arr_white %>% 
+  group_by(dbcluster) %>%
+  dplyr::mutate(hull = 1:n(),
+                hull = factor(hull, chull(longitude, latitude)))%>%
+  arrange(hull) %>% 
+  filter(dbcluster >=1) # since dbcluster < 1 are noises
+
+# plot
+dbPlotWhiteArr <- autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=ss60Arr_white, 
+             aes(longitude,latitude),
+             size=0.3, 
+             alpha=0.3)+
+  geom_polygon(data = hulls_wArr, 
+               aes(longitude,latitude,
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "tomato") +
+  theme(legend.position = "left") +
+  ggtitle("DBSCAN Cluster for S&S (s60) Only Targeted to Black People")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+dbPlotWhiteArr
+```
+
+### Overlapping map
+
+```{r}
+dbplotALLArr <- autoplot.OpenStreetMap(basemap_bng) +
+  geom_point(data=ss60Arr_asian, 
+             aes(longitude,latitude),
+             size=0.1) +
+  geom_polygon(data = hulls_aArr, 
+               aes(longitude,latitude,
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill="blueviolet") +
+  geom_point(data=ss60Arr_black, 
+             aes(longitude,latitude),
+             size=0.1)+
+  geom_polygon(data = hulls_bArr, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               alpha = 1,
+               fill = "tomato") +
+  geom_point(data=ss60Arr_white, 
+             aes(longitude,latitude), 
+             size=0.1)+
+  geom_polygon(data = hulls_wArr, 
+               aes(longitude,latitude, 
+                   group=dbcluster,
+                   fill=dbcluster),
+               fill = "seagreen") +
+  theme(legend.position = "none") +
+  ggtitle("ALL")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+dbplotALLArr
 ```
 
 ## st-dbscan
