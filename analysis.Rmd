@@ -207,6 +207,27 @@ ss60_london %>%
   kable(., caption = 'Ethnicities for people being S&S (s60) from April 2019 to April 2021')
 ```
 
+###  Proportion of S&S by race
+
+```{r message=False, warning=False, results='asis'}
+ss60_london %>% 
+  group_by(officer_defined_ethnicity) %>% 
+  summarise(., count=n(),) %>%
+  mutate(prop = count / sum(count) *100) %>% 
+  arrange(desc(prop)) %>% 
+  st_drop_geometry() %>% 
+  mutate_if(is.numeric, ~round(., 2)) %>% 
+  kable(., caption = ' Proportion of S&S by race and population')
+```
+
+```{r}
+ss60_london %>% 
+  count(year = year(date), officer_defined_ethnicity) %>% 
+  ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
+  geom_point() +
+  geom_line() 
+```
+
 ## Simple point distribution
 
 ```{r}
@@ -1124,7 +1145,7 @@ leaflet(data = clusters) %>%
                lng = ~longitude)
 ```
 
-## Make continuous observations
+## Continuous observations
 
 We have explored the point pattern analysis for London S&S and how about looking at MSOAs, wards or boroughs as a whole? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by MSOA (averaged with 8,346 population in 2010) and there are 983 MSOAs in London.
 
@@ -1274,6 +1295,50 @@ all_data <- subset(merged, select = -c(total_ss60_outcome,msoa_name)) %>%
   mutate(ss60_arrest_rate = arrest/total_ss60*100) %>% 
   mutate_if(is.numeric, ~round(., 2))
 
+```
+
+### Proportion of S&S 60 by race relative to their population
+
+```{r message=False, warning=False, results='asis'}
+a <- sum(as.numeric(all_data$ss60_asian), na.rm = TRUE) / 
+  sum(as.numeric(all_data$ethnic_group_2011_census_asian_asian_british), na.rm = TRUE) *100
+b <- sum(as.numeric(all_data$ss60_black), na.rm = TRUE) / 
+  sum(as.numeric(all_data$ethnic_group_2011_census_black_african_caribbean_black_british), na.rm = TRUE) *100
+w <- sum(as.numeric(all_data$ss60_white), na.rm = TRUE) / 
+  sum(as.numeric(all_data$ethnic_group_2011_census_white), na.rm = TRUE) *100
+o <- sum(as.numeric(all_data$ss60_other), na.rm = TRUE) / 
+  sum(as.numeric(all_data$ethnic_group_2011_census_other_ethnic_group), na.rm = TRUE) *100
+na <- sum(as.numeric(all_data$ss60_na), na.rm = TRUE) / 
+  sum(as.numeric(all_data$age_structure_2011_census_all_ages), na.rm = TRUE) *100
+
+data.frame(race = c("asian", "black", "white", "others", "NA"),
+                         prop_by_pop = c(a, b, w, o, na)) %>% 
+  mutate_if(is.numeric, ~round(., 2)) %>% 
+  arrange(desc(prop_by_pop)) %>% 
+  kable(.)
+```
+
+### Hit rates
+
+That is, what proportion of searches, by race, were successful? This proportion is known as the contraband recovery rate, or the "hit rate." If racial groups have different hit rates, it can imply that racial groups are being subjected to different standards.
+
+```{r message=False, warning=False, results='asis'}
+HR1 <- ss60_london %>% 
+  group_by(officer_defined_ethnicity) %>% 
+  summarise(., allSS=n()) %>% 
+  st_drop_geometry()  
+
+HR2 <- ss60_london %>% 
+  group_by(officer_defined_ethnicity) %>% 
+  filter(outcome=="Arrest") %>% 
+  summarise(., arrest=n()) %>% 
+  st_drop_geometry()
+
+left_join(HR1, HR2) %>% 
+  mutate(hit_rate = arrest/allSS *100) %>% 
+  mutate_if(is.numeric, ~round(., 2)) %>% 
+  arrange(desc(hit_rate)) %>% 
+  kable(.,)
 ```
 
 Create a subset data of all rates for later parts.
