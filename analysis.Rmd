@@ -210,11 +210,11 @@ ss60_london %>%
 ### Trend figure
 
 ```{r}
-ss60_london %>% 
-  count(year = year(date), officer_defined_ethnicity) %>% 
-  ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
-  geom_point() +
-  geom_line() 
+# ss60_london %>% 
+#   count(year = year(date), officer_defined_ethnicity) %>% 
+#   ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
+#   geom_point() +
+#   geom_line() 
 ```
 
 ## Simple point distribution
@@ -250,97 +250,13 @@ Two ways to determine Epsilon: 1. Ripley's K - where K values above the Poisson 
 
 Potential way to determine MinPts: The rule of thumb for setting minPts is to use at least the number of dimensions of the dataset plus one (Hahsler et al., 2019). However, by setting MinPts = 3 (which is what Hahsler et al suggest) it results in 229 unique cluster for all S&S (s60) points, which is too many.
 
-### All S&S (s60)
-
-```{r message=FALSE, warning=FALSE}
-ss60_londonSP <- ss60_london %>%
-  as(., 'Spatial') 
-
-ss60_londonPoints <- ss60_londonSP %>%
-  geometry(.)%>%
-  as.data.frame()
-
-window <- as.owin(msoaMap)
-ss60_londonPPP <- ppp(x=ss60_londonSP@coords[,1],
-                     y=ss60_londonSP@coords[,2],
-                     window=window)
-```
-
-1.  Ripley's K method
-
-```{r message=FALSE}
-ss60_londonPPP %>%
-  Kest(., correction="border") %>%
-  plot(xlim=c(0,1500)) %>% 
-  abline(v = 450, col = "blue", lty = 2)
-```
-
-From the output graph, we can see that up until distances of around 450 meters, S&S(s60) appear to be clustered in London MSOAs and the largest bulge in the graph at around 400 meters Increasing the distance beyond 450 meters leads the distribution becomes random and dispersed. Therefore, setting eps to 400m or 450m is reasonable.
-
-```{r warning=False, message=False}
-library(factoextra)
-
-db <- ss60_londonPoints %>%
-  fpc::dbscan(.,eps = 450, MinPts = 50)  # 450m radius of at least 50 S&S(s60) points
-
-theme_set(theme_minimal())
-
-fviz_cluster(db, ss60_londonPoints, 
-                           geom = "point",
-                           stand = FALSE, labelsize = NA,
-                           outlier.pointsize = .8,
-                           #xlab="x", ylab="y",
-                           main="DBSCAN Cluster Hulls All S&S (s60) \n (ep=450, MinPts=50)") +
-theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.title.y=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank())+
-  coord_equal()
-```
-
-It gives us 33 unique clusters. The graph tells us this high intensity (450 meters radius --\> 50 S&S for violence) is not widespread the country, only shown in few neighborhoods at Northen London.
-
-2.  KNNDistance method:
-
-```{r message=FALSE, warning=FALSE}
-ss60_londonPoints %>%
-  dbscan::kNNdistplot(.,k=50) %>% 
-  title(main="50-nearst Neighbor Distance Plot \n (MinPts=50, knee=1600)") %>% 
-  abline(h = 1600, col = "red", lty = 2)
-```
-
-```{r}
-db_KNN <- ss60_londonPoints %>%
-  fpc::dbscan(.,eps = 1600, MinPts = 50)
-
-theme_set(theme_minimal())
-
-fviz_cluster(db_KNN, ss60_londonPoints, 
-                           geom = "point",
-                           stand = FALSE, labelsize = NA,
-                           outlier.pointsize = .8,
-                           #xlab="x", ylab="y",
-                           main="DBSCAN Cluster Hulls All S&S (s60) \n (ep=1600, MinPts=50)") +
-theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.title.y=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank())+
-  coord_equal()
-```
-
-It gives us 5 unique clusters. This graph tells us if we increase the neighborhood radius range to 1.6 km <more explaination needed>
-
 ### Black
 
 Observations: 1. if setting the eps as Ripley's K test suggests, the number is small and resulting in some small clusters with very few points within. 2. if setting as kNNdistplot suggests, the "knee" is usually quite large and it will give us a large cluster + some small clusters + isolated noises.
 
 ```{r message=FALSE, warning=FALSE}
+window <- as.owin(wardMap)
+
 ss60_black <- ss60_london %>% 
   filter(officer_defined_ethnicity == "Black") 
 
@@ -361,15 +277,17 @@ ss60_blackPoints<- ss60_blackSP %>%
 ```{r message=FALSE, warning=FALSE}
 ss60_blackPPP %>%
   Kest(., correction="border") %>%
-  plot(xlim=c(0,1500)) %>% 
-  abline(v = 450, col = "blue", lty = 2)
+  plot()
+  #abline(v = 450, col = "blue", lty = 2)
 ```
 
 Plot:
 
 ```{r}
+library(factoextra)
+
 db_b <- ss60_blackPoints %>%
-  fpc::dbscan(.,eps = 450, MinPts = 50)
+  fpc::dbscan(.,eps = 1000, MinPts = 50)
 
 theme_set(theme_minimal())
 
@@ -389,8 +307,6 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
   coord_equal()
 
 ```
-
-It gives us 14 unique clusters. The distribuion is very like the previous counting all S&S.
 
 2.  Choose KNN distance method to select suitable parameters:
 
@@ -1184,7 +1100,7 @@ Columns we need:
 >
 > *the above might be useful if to calculate spatial autocorrelation between S&S rate and income/economically inactive rate*
 
-```{r message=FALSE}
+```{r message=FALSE, warning=FALSE}
 cols <- c(
 "new_code",
 "population_and_age_all_ages_2011",
@@ -1221,8 +1137,6 @@ cols.num <- c("all_population", "all_households", "white_pop", "asian_pop",
               "unemployed_loneParent_rate", "no_qualification_rate")
 wardDataMerged[cols.num] <- sapply(wardDataMerged[cols.num],as.numeric)
 
-# check column data types
-sapply(wardDataMerged, class)
 
 # calculate population percent
 wardDataMerged <- wardDataMerged %>% 
@@ -1242,21 +1156,22 @@ ss60_count <- st_join(ss60_london, wardMap) %>%
   summarise(., count=n(),) %>%
   st_drop_geometry() %>% 
   pivot_wider(names_from = officer_defined_ethnicity, values_from = count) %>% 
-  mutate(total_ss60 = sum(c_across(Black:Other), na.rm = TRUE)) %>% 
+  rename(NA_eth = "NA") %>% 
+  mutate(total_ss60 = sum(c_across(Asian:NA_eth), na.rm = TRUE)) %>% 
   dplyr::rename(ss60_black = "Black",
                 ss60_white = "White",
                 ss60_asian = "Asian",
                 ss60_other = "Other",
-                ss60_na = "NA") 
+                ss60_na = "NA_eth") 
 ```
 
 Count all violent crimes that fall within wards.
 
 ```{r message=FALSE}
-vio_count <- st_join(violence_london, lsoaMap) %>% 
-  group_by(MSOA11CD) %>% 
+vio_count <- st_join(violence_london, wardMap) %>% 
+  group_by(GSS_CODE) %>% 
   summarise(., count=n(),) %>%
-  arrange(desc(MSOA11CD)) %>% 
+  arrange(desc(GSS_CODE)) %>% 
   st_drop_geometry() %>% 
   na.omit(.) %>% 
   dplyr::rename(total_violent_crime = "count")
@@ -1265,37 +1180,38 @@ vio_count <- st_join(violence_london, lsoaMap) %>%
 Count successful S&S (s60) that leading to an arrest.
 
 ```{r message=FALSE, warning=FALSE}
-arrest_count <- st_join(ss60_london, msoaMap) %>% 
+arrest_count <- st_join(ss60_london, wardMap) %>% 
   filter(outcome=="Arrest") %>% 
-  group_by(MSOA11CD, officer_defined_ethnicity) %>% 
+  group_by(GSS_CODE, officer_defined_ethnicity) %>% 
   summarise(., arrest_count=n(),) %>%
-  arrange(desc(MSOA11CD)) %>% 
+  arrange(desc(GSS_CODE)) %>% 
   st_drop_geometry() %>% 
   pivot_wider(names_from = officer_defined_ethnicity, values_from = arrest_count) %>% 
-  mutate(total_arrest = sum(c_across(White:Other), na.rm = TRUE)) %>% 
+  rename(NA_eth = "NA") %>% 
+  mutate(total_arrest = sum(c_across(Black:NA_eth), na.rm = TRUE)) %>% 
   dplyr::rename(arrest_black = "Black",
                 arrest_white = "White",
                 arrest_asian = "Asian",
                 arrest_other = "Other",
-                arrest_na = "NA") 
+                arrest_na = "NA_eth") 
 
-merged <- left_join(msoaDataMerged, vio_count) %>% 
-  left_join(., ss60_count) %>% 
-  left_join(., arrest_count)
+merged <- left_join(wardDataMerged, vio_count, by = c("ward_code" = "GSS_CODE")) %>% 
+  left_join(., ss60_count, by = c("ward_code" = "GSS_CODE")) %>% 
+  left_join(., arrest_count, by = c("ward_code" = "GSS_CODE"))
   
 ```
 
 Calculate rates.
 
 ```{r message=FALSE}
-all_data <- subset(merged, select = -c(msoa_name)) %>% 
+all_data <- merged %>% 
   clean_names() %>%   
   # violent crime rate 
   mutate(household_vio_rate = total_violent_crime/
-           households_2011_all_households *100) %>% 
+           all_households *100) %>% 
   # total S&S rate
   mutate(household_search_rate = total_ss60 / 
-           households_2011_all_households *100) %>% 
+           all_households *100) %>% 
   # total arrest rate 
   mutate(arrest_rate = total_arrest/total_ss60 *100) %>% 
   # search rate
@@ -1305,11 +1221,11 @@ all_data <- subset(merged, select = -c(msoa_name)) %>%
   mutate(other_search_rate = ss60_other/ total_ss60 *100) %>% 
   mutate(na_search_rate = ss60_na/ total_ss60 *100) %>% 
   # hit rates
-  mutate(black_arrest_rate = arrest_black/ ss60_black *100) %>% 
-  mutate(white_arrest_rate = arrest_white/ ss60_white *100) %>% 
-  mutate(asian_arrest_rate = arrest_asian/ ss60_asian *100) %>% 
-  mutate(other_arrest_rate = arrest_other/ ss60_other *100) %>% 
-  mutate(na_arrest_rate = arrest_na/ ss60_na *100) %>% 
+  mutate(black_hit_rate = arrest_black/ ss60_black *100) %>% 
+  mutate(white_hit_rate = arrest_white/ ss60_white *100) %>% 
+  mutate(asian_hit_rate = arrest_asian/ ss60_asian *100) %>% 
+  mutate(other_hit_rate = arrest_other/ ss60_other *100) %>% 
+  mutate(na_hit_rate = arrest_na/ ss60_na *100) %>% 
   mutate_if(is.numeric, ~round(., 2))
 
 ```
@@ -1344,10 +1260,10 @@ HR2 <- ss60_london %>%
   st_drop_geometry()
 
 # calculate total population for each race based on 2011 census 
-aP <- sum(as.numeric(all_data$ethnic_group_2011_census_asian_asian_british), na.rm = TRUE)
-bP <- sum(as.numeric(all_data$ethnic_group_2011_census_black_african_caribbean_black_british), na.rm = TRUE)
-wP <- sum(as.numeric(all_data$ethnic_group_2011_census_white), na.rm = TRUE)
-oP <- sum(as.numeric(all_data$ethnic_group_2011_census_other_ethnic_group), na.rm = TRUE)
+aP <- sum(as.numeric(all_data$asian_pop), na.rm = TRUE)
+bP <- sum(as.numeric(all_data$black_pop), na.rm = TRUE)
+wP <- sum(as.numeric(all_data$white_pop), na.rm = TRUE)
+oP <- sum(as.numeric(all_data$other_eth_pop), na.rm = TRUE)
 
 left_join(HR1, HR2) %>% 
   mutate(population = c(aP, bP, oP, wP, 0),
@@ -1363,16 +1279,7 @@ Create a subset data of all rates for later parts.
 
 ```{r}
 all_rates <- all_data %>% 
-  dplyr::select(ends_with("rate") | msoa11cd) 
-```
-
-```{r}
-wardMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
-                              "London_Ward_CityMerged.shp")) %>% 
-  st_transform(., 27700)
-
-tm_shape(msoaMap) +
-  tm_polygons(col = NA, alpha = 0.5)
+  dplyr::select(ends_with("rate") | ward_code) 
 ```
 
 ## Spatial autocorrelation
@@ -1388,86 +1295,112 @@ coordsM<- wardMap%>%
 plot(coordsM,axes=TRUE)
 
 # create a neighborhoods list
-LMsoa_nb <- wardMap %>%
+Lward_nb <- wardMap %>%
   poly2nb(., queen=T)  
-plot(LMsoa_nb, st_geometry(coordsM), col="red")
+plot(Lward_nb, st_geometry(coordsM), col="red")
 
 # create a spatial weight object
-LMsoa_lw <- LMsoa_nb %>%
+Lward_lw <- Lward_nb %>%
   nb2listw(., style="C")
 ```
 
 ### Global Moran's I
 
+variables to test for spatial autocorrelation:
+
 ```{r}
-wardMap %>%
-  pull(HECTARES) %>%
-  as.vector()%>%
-  #na.omit(all_rates) %>%   # ignore the NA
-  geary.test(., LMsoa_lw, zero.policy = TRUE)
+colnames(all_rates)
 ```
 
 Make a table of all statistical results for all my variables
 
 ```{r}
 # variables used for the test
-variable_names <- c( "avg_household_vio_rate", "avg_household_ss60_rate",
-        "ss60_black_rate","ss60_white_rate",
-        "ss60_asian_rate","ss60_arrest_rate")
+variable_names <- c( "household_vio_rate",
+                     "household_search_rate",
+                     "arrest_rate",
+                     "black_search_rate",
+                     "white_search_rate",
+                     "asian_search_rate",
+                     "other_search_rate",
+                     "na_search_rate",
+                     "black_hit_rate",
+                     "white_hit_rate",
+                     "asian_hit_rate",
+                     "other_hit_rate",
+                     "na_hit_rate"
+                     )
 
 # function to compute coefficient
-cal_glb_moran <- function(x) {
+cal_coef <- function(x) {
   all_rates %>% 
     pull(x) %>% 
     as.vector() %>% 
     na.omit(all_rates) %>%
-    moran.test(., LMsoa_lw, zero.policy = TRUE)
+    moran.test(., Lward_lw, zero.policy = TRUE)
 }
 
 datalist = list()
 for (aVar in variable_names) {
-  dat <- list(cal_glb_moran(x = aVar)$estimate)
+  dat <- list(cal_coef(x = aVar)$estimate)
   datalist[[aVar]] <- dat
 }
 datalist
 
 ```
 
-Global Moran's I tells us almost all my variables have some clustering except for arrest rate and ss60 for white people, showing police tend to randomly stop and search white people but intentionly or on purpose to search black and Asian people.
+Global Moran's I tells us almost all my variables have some clustering except for arrest rate and ss60 for white people, showing police tend to randomly stop and search white people but intentionally or on purpose to search black and Asian people.
 
 ### Geary's C
 
 ```{r}
-wardMap %>%
-  na.omit(wardMap) %>%
-  pull(HECTARES) %>%
+all_rates %>%
+  na.omit(all_rates) %>%
+  pull(na_hit_rate) %>%
   as.vector()%>%
-  geary.test(., LMsoa_lw, zero.policy = TRUE)
+  geary.test(., Lward_lw, zero.policy = TRUE)
+
+# function to compute coefficient
+cal_coef <- function(x) {
+  all_rates %>% 
+    pull(x) %>% 
+    as.vector() %>% 
+    na.omit(all_rates) %>%
+    geary.test(., LMsoa_lw, zero.policy = TRUE)
+}
+
+datalist = list()
+for (aVar in variable_names) {
+  dat <- list(cal_coef(x = aVar)$estimate)
+  datalist[[aVar]] <- dat
+}
+datalist
 ```
 
 ### General G
 
 ```{r eval=FALSE, include=FALSE}
 all_rates %>%
-  pull(ss60_arrest_rate) %>%
+  na.omit(all_rates) %>% 
+  pull(black_search_rate) %>%
   as.vector()%>%
-  globalG.test(., LMsoa_lw, zero.policy = TRUE)
+  globalG.test(., Lward_lw, zero.policy = TRUE)
 
 all_rates %>%
-  pull(avg_household_vio_rate) %>%
+  pull(black_search_rate) %>%
   as.vector()%>%
   na.omit(all_rates) %>% 
-  geary.test(., LMsoa_lw, zero.policy = TRUE)
+  geary.test(., Lward_lw, zero.policy = TRUE)
 ```
 
 ### Local Moran's I
 
 ```{r eval=FALSE, include=FALSE}
 cal_loc_moran <- all_rates %>%
-  pull(avg_household_ss60_rate) %>%
+  pull(black_search_rate) %>%
   as.vector()%>%
   na.omit(all_rates) %>% 
-  localmoran(., LMsoa_lw, zero.policy = TRUE)%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
 
 ```
