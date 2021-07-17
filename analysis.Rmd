@@ -49,8 +49,8 @@ lsoaMap  <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI
                               "LSOA_2011_London_gen_MHW.shp"))%>%
   st_transform(., 27700)
 
-msoaMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
-                              "MSOA_2011_London_gen_MHW.shp")) %>% 
+wardMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
+                              "London_Ward_CityMerged.shp")) %>% 
   st_transform(., 27700)
 ```
 
@@ -207,18 +207,7 @@ ss60_london %>%
   kable(., caption = 'Ethnicities for people being S&S (s60) from April 2019 to April 2021')
 ```
 
-###  Proportion of S&S by race
-
-```{r message=False, warning=False, results='asis'}
-ss60_london %>% 
-  group_by(officer_defined_ethnicity) %>% 
-  summarise(., count=n(),) %>%
-  mutate(prop = count / sum(count) *100) %>% 
-  arrange(desc(prop)) %>% 
-  st_drop_geometry() %>% 
-  mutate_if(is.numeric, ~round(., 2)) %>% 
-  kable(., caption = ' Proportion of S&S by race and population')
-```
+###  Trend figure
 
 ```{r}
 ss60_london %>% 
@@ -231,21 +220,21 @@ ss60_london %>%
 ## Simple point distribution
 
 ```{r}
-tm_shape(msoaMap) + 
+tm_shape(wardMap) + 
   tm_polygons(col = NA, alpha = 0.5) +
   tm_shape(violence_london) +
   tm_dots(col = "blue") +
   tm_layout(main.title="Violent Crimes London April 2019 to April 2021",
             main.title.size=1)
 
-tm_shape(msoaMap) +
+tm_shape(wardMap) +
   tm_polygons(col = NA, alpha = 0.5) +
   tm_shape(ss_london) +
   tm_dots(col = "yellow") +
   tm_layout(main.title="Stop and Search London April 2019 to April 2021", 
             main.title.size=1)
   
-tm_shape(msoaMap) + 
+tm_shape(wardMap) + 
   tm_polygons(col = NA, alpha = 0.5) +
   tm_shape(ss60_london) +
   tm_dots(col = "red") +
@@ -1145,115 +1134,123 @@ leaflet(data = clusters) %>%
                lng = ~longitude)
 ```
 
-## Continuous observations
+## Add demographic data
 
 We have explored the point pattern analysis for London S&S and how about looking at MSOAs, wards or boroughs as a whole? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by MSOA (averaged with 8,346 population in 2010) and there are 983 MSOAs in London.
 
 The demographic data was obtained from <https://data.london.gov.uk/dataset/msoa-atlas>.
 
 ```{r message=FALSE, warning=FALSE}
-msoaData <- read_csv("https://data.london.gov.uk/download/msoa-atlas/20264159-36cb-4aa2-8371-ae884ae83e88/msoa-data.csv",na = c("NA", "n/a")) %>% 
+wardData <- read_csv("https://data.london.gov.uk/download/ward-profiles-and-atlas/150584ff-3509-4e17-91d1-315ed4557419/ward-atlas-data.csv",na = c("NA", "n/a")) %>% 
   clean_names() 
+
 ```
 
-Notice msoaData has 984 rows while the msoaMap has 983 rows. After inspection, the msoaData has an extra row showing the average statistics for all London MSOA, which needs to be removed.
+Clean up column names
+
+```{r}
+wardData <- wardData %>% 
+  rename(old_code = "x1",
+         new_code = "x2",
+         borough_name = "x3",
+         ward_name = "x4")
+```
+
+Notice wardData has 629 rows while the wardMap has 625 rows. After inspection, wardData's last three rows are national statistics and the first row is a part of column name, which need to be removed.
 
 ```{r message=FALSE}
-msoaData <- msoaData[1:983,]
+wardData <- wardData[2:626,]
 ```
 
 Columns we need:
 
-> -   "age_structure_2011_census_all_ages",
-> -   "households_2011_all_households",
+> -   "population_and_age_all_ages_2011",
+> -   "household_composition_household_composition_2001_census_all_households",
 >
 > *the above can calculate violent crime rate and overall S&S rate by dividing by the number of crimes/S&S in each geographic unit*
 >
-> -   "ethnic_group_2011_census_white",
-> -   "ethnic_group_2011_census_mixed_multiple_ethnic_groups"，
-> -   "ethnic_group_2011_census_asian_asian_british",
-> -   "ethnic_group_2011_census_black_african_caribbean_black_british",
-> -   "ethnic_group_2011_census_other_ethnic_group",
-> -   "ethnic_group_2011_census_bame", ------------ ***what does "bame"mean???***
+> -   "diversity_ethnic_group_5\_groups_2011_census_white",
+> -   "diversity_ethnic_group_5\_groups_2011_census_asian_or_asian_british",
+> -   "diversity_ethnic_group_5\_groups_2011_census_black_or_black_british",
+> -   "diversity_ethnic_group_5\_groups_2011_census_other",
 >
 > *the above can calculate specific S&S rate for each ethnic group because the S&S data also has ethnic data*
 >
-> -   "economic_activity_2011_census_unemployment_rate",
-> -   "economic_activity_2011_census_economically_inactive_percent",
+> -   "household_income_mean_modelled_household_income_2012_13",
+> -   "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
+> -   "employment_economic_activity_percentages_2011_census_aged_16_to_24_percent_unemployed",
+> -   "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
+> -   "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
 >
-> *the above might be useful if to calculate spatial autocorrelation between S&S rate and unemployment/economically inactive rate*
+> *the above might be useful if to calculate spatial autocorrelation between S&S rate and income/economically inactive rate*
 
 ```{r message=FALSE}
 cols <- c(
-"middle_super_output_area",
-"msoa_name",
-"age_structure_2011_census_all_ages",
-"households_2011_all_households",
-"ethnic_group_2011_census_white",                                               
-"ethnic_group_2011_census_mixed_multiple_ethnic_groups",                        
-"ethnic_group_2011_census_asian_asian_british",
-"ethnic_group_2011_census_black_african_caribbean_black_british",
-"ethnic_group_2011_census_other_ethnic_group",
-"ethnic_group_2011_census_bame",
-"economic_activity_2011_census_unemployment_rate",                                
-"economic_activity_2011_census_economically_inactive_percent")
+"new_code",
+"population_and_age_all_ages_2011",
+"household_composition_household_composition_2001_census_all_households",
+"diversity_ethnic_group_5_groups_2011_census_white",
+"diversity_ethnic_group_5_groups_2011_census_asian_or_asian_british",
+"diversity_ethnic_group_5_groups_2011_census_black_or_black_british",                         
+"diversity_ethnic_group_5_groups_2011_census_other",                        
+"employment_economic_activity_percentages_2011_census_economically_inactive_percent",
+"employment_economic_activity_percentages_2011_census_aged_16_to_24_percent_unemployed",
+"employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
+"qualifications_qualifications_and_students_2011_census_percent_no_qualifications")
 
-msoaDataMerged <-
-  left_join(msoaMap %>% dplyr::select(MSOA11CD,MSOA11NM,geometry),
-            msoaData %>% dplyr::select(all_of(cols)),
-            by = c("MSOA11CD" = "middle_super_output_area"))
+wardDataMerged <-
+  left_join(wardMap %>% dplyr::select(NAME,GSS_CODE,geometry),
+            wardData %>% dplyr::select(all_of(cols)),
+            by = c("GSS_CODE" = "new_code")) %>% 
+  rename(all_population = "population_and_age_all_ages_2011",
+         all_households = "household_composition_household_composition_2001_census_all_households",
+         white_pop = "diversity_ethnic_group_5_groups_2011_census_white",
+         asian_pop = "diversity_ethnic_group_5_groups_2011_census_asian_or_asian_british",
+         black_pop = "diversity_ethnic_group_5_groups_2011_census_black_or_black_british",
+         otherEth_pop = "diversity_ethnic_group_5_groups_2011_census_other",
+         econ_inac_rate = "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
+         unemployed_16to24_rate = "employment_economic_activity_percentages_2011_census_aged_16_to_24_percent_unemployed",
+         unemployed_loneParent_rate = "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
+         no_qualification_rate = "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
+         ward_name = "NAME",
+         ward_code = "GSS_CODE") 
+
+# convert column types to numeric
+cols.num <- c("all_population", "all_households", "white_pop", "asian_pop",
+              "black_pop", "otherEth_pop", "econ_inac_rate", "unemployed_16to24_rate",
+              "unemployed_loneParent_rate", "no_qualification_rate")
+wardDataMerged[cols.num] <- sapply(wardDataMerged[cols.num],as.numeric)
+
+# check column data types
+sapply(wardDataMerged, class)
+
+# calculate population percent
+wardDataMerged <- wardDataMerged %>% 
+  dplyr::mutate(white_pop_rate = white_pop / all_population*100,
+         asian_pop_rate = asian_pop / all_population*100,
+         black_pop_rate = black_pop / all_population*100,
+         otherEth_pop_rate = otherEth_pop / all_population*100) %>% 
+  mutate_if(is.numeric, ~round(., 2))
+         
 ```
 
-Count all S&S (section 60) for each ethnic group that fall within MSOAs.
+Count all S&S (section 60) for each ethnic group that fall within wards.
 
 ```{r message=FALSE}
-ss60_joined <- st_join(ss60_london, msoaMap) %>% 
-  group_by(MSOA11CD, officer_defined_ethnicity) %>% 
+ss60_count <- st_join(ss60_london, wardMap) %>% 
+  group_by(GSS_CODE, officer_defined_ethnicity) %>% 
   summarise(., count=n(),) %>%
-  arrange(desc(MSOA11CD)) %>% 
-  st_drop_geometry()
-
-ss60_ethnic <- ss60_joined %>% 
-  pivot_wider(names_from = officer_defined_ethnicity, values_from = count)
-
-
-ss60_ethnicAll <- ss60_joined %>% 
-  group_by(MSOA11CD) %>% 
-  summarise(., sum(count),) %>%
-  arrange(desc(MSOA11CD)) 
-
-ss60_ethicFinal <- left_join(ss60_ethnic, ss60_ethnicAll) %>% 
+  st_drop_geometry() %>% 
+  pivot_wider(names_from = officer_defined_ethnicity, values_from = count) %>% 
+  mutate(total_ss60 = sum(c_across(Black:Other), na.rm = TRUE)) %>% 
   dplyr::rename(ss60_black = "Black",
                 ss60_white = "White",
                 ss60_asian = "Asian",
                 ss60_other = "Other",
-                ss60_na = "NA",
-                total_ss60 = "sum(count)")
-
+                ss60_na = "NA") 
 ```
 
-Count all S&S (section 60) for each outcome types that fall within MSOAs.
-
-```{r message=FALSE}
-ss60_joined2 <- st_join(ss60_london, msoaMap) %>% 
-  group_by(MSOA11CD, outcome) %>% 
-  summarise(., count=n(),) %>%
-  arrange(desc(MSOA11CD)) %>% 
-  st_drop_geometry()
-
-ss60_outcome <- ss60_joined2 %>% 
-  pivot_wider(names_from = outcome, values_from = count)
-
-ss60_outcomeAll <- ss60_joined2 %>% 
-  group_by(MSOA11CD) %>% 
-  summarise(., sum(count),) %>%
-  arrange(desc(MSOA11CD)) 
-
-ss60_outcomeFinal <- left_join(ss60_outcome,ss60_outcomeAll) %>% 
-  dplyr::rename(total_ss60_outcome = "sum(count)")
-```
-
-Count all violent crimes that fall within MSOAs.
+Count all violent crimes that fall within wards.
 
 ```{r message=FALSE}
 vio_count <- st_join(violence_london, lsoaMap) %>% 
@@ -1263,81 +1260,102 @@ vio_count <- st_join(violence_london, lsoaMap) %>%
   st_drop_geometry() %>% 
   na.omit(.) %>% 
   dplyr::rename(total_violent_crime = "count")
+```
+
+Count successful S&S (s60) that leading to an arrest.
+
+```{r message=FALSE, warning=FALSE}
+arrest_count <- st_join(ss60_london, msoaMap) %>% 
+  filter(outcome=="Arrest") %>% 
+  group_by(MSOA11CD, officer_defined_ethnicity) %>% 
+  summarise(., arrest_count=n(),) %>%
+  arrange(desc(MSOA11CD)) %>% 
+  st_drop_geometry() %>% 
+  pivot_wider(names_from = officer_defined_ethnicity, values_from = arrest_count) %>% 
+  mutate(total_arrest = sum(c_across(White:Other), na.rm = TRUE)) %>% 
+  dplyr::rename(arrest_black = "Black",
+                arrest_white = "White",
+                arrest_asian = "Asian",
+                arrest_other = "Other",
+                arrest_na = "NA") 
 
 merged <- left_join(msoaDataMerged, vio_count) %>% 
-  left_join(., ss60_ethicFinal) %>% 
-  left_join(., ss60_outcomeFinal)
+  left_join(., ss60_count) %>% 
+  left_join(., arrest_count)
+  
 ```
 
-Check if the sum of S&S by ethical group is equal to the sum of outcome
-
-```{r}
-merged$total_ss60[!(merged$total_ss60 %in% merged$total_ss60_outcome)]
-```
-
-"ineger(0)" means they are equal so we can remove one and then we can calculate the rates.
+Calculate rates.
 
 ```{r message=FALSE}
-all_data <- subset(merged, select = -c(total_ss60_outcome,msoa_name)) %>% 
+all_data <- subset(merged, select = -c(msoa_name)) %>% 
   clean_names() %>%   
-  mutate(avg_household_vio_rate = total_violent_crime/
-           households_2011_all_households*100) %>% 
-  mutate(avg_household_ss60_rate = total_ss60 / 
-           households_2011_all_households*100) %>% 
-  mutate(ss60_black_rate = ss60_black/
-           ethnic_group_2011_census_black_african_caribbean_black_british*100) %>% 
-  mutate(ss60_white_rate = ss60_white/
-           ethnic_group_2011_census_white*100) %>% 
-  mutate(ss60_asian_rate = ss60_asian/
-           ethnic_group_2011_census_asian_asian_british*100) %>% 
-  mutate(ss60_other_ethnicity_rate = ss60_other/
-           ethnic_group_2011_census_other_ethnic_group*100) %>% 
-  mutate(ss60_arrest_rate = arrest/total_ss60*100) %>% 
+  # violent crime rate 
+  mutate(household_vio_rate = total_violent_crime/
+           households_2011_all_households *100) %>% 
+  # total S&S rate
+  mutate(household_search_rate = total_ss60 / 
+           households_2011_all_households *100) %>% 
+  # total arrest rate 
+  mutate(arrest_rate = total_arrest/total_ss60 *100) %>% 
+  # search rate
+  mutate(black_search_rate = ss60_black/ total_ss60 *100) %>% 
+  mutate(white_search_rate = ss60_white/ total_ss60 *100) %>% 
+  mutate(asian_search_rate = ss60_asian/ total_ss60 *100) %>% 
+  mutate(other_search_rate = ss60_other/ total_ss60 *100) %>% 
+  mutate(na_search_rate = ss60_na/ total_ss60 *100) %>% 
+  # hit rates
+  mutate(black_arrest_rate = arrest_black/ ss60_black *100) %>% 
+  mutate(white_arrest_rate = arrest_white/ ss60_white *100) %>% 
+  mutate(asian_arrest_rate = arrest_asian/ ss60_asian *100) %>% 
+  mutate(other_arrest_rate = arrest_other/ ss60_other *100) %>% 
+  mutate(na_arrest_rate = arrest_na/ ss60_na *100) %>% 
   mutate_if(is.numeric, ~round(., 2))
 
 ```
 
-### Proportion of S&S 60 by race relative to their population
-
-```{r message=False, warning=False, results='asis'}
-a <- sum(as.numeric(all_data$ss60_asian), na.rm = TRUE) / 
-  sum(as.numeric(all_data$ethnic_group_2011_census_asian_asian_british), na.rm = TRUE) *100
-b <- sum(as.numeric(all_data$ss60_black), na.rm = TRUE) / 
-  sum(as.numeric(all_data$ethnic_group_2011_census_black_african_caribbean_black_british), na.rm = TRUE) *100
-w <- sum(as.numeric(all_data$ss60_white), na.rm = TRUE) / 
-  sum(as.numeric(all_data$ethnic_group_2011_census_white), na.rm = TRUE) *100
-o <- sum(as.numeric(all_data$ss60_other), na.rm = TRUE) / 
-  sum(as.numeric(all_data$ethnic_group_2011_census_other_ethnic_group), na.rm = TRUE) *100
-na <- sum(as.numeric(all_data$ss60_na), na.rm = TRUE) / 
-  sum(as.numeric(all_data$age_structure_2011_census_all_ages), na.rm = TRUE) *100
-
-data.frame(race = c("asian", "black", "white", "others", "NA"),
-                         prop_by_pop = c(a, b, w, o, na)) %>% 
-  mutate_if(is.numeric, ~round(., 2)) %>% 
-  arrange(desc(prop_by_pop)) %>% 
-  kable(.)
+```{r}
+  # mutate(black_search_rate = ss60_black/
+  #          ethnic_group_2011_census_black_african_caribbean_black_british*100) %>% 
+  # mutate(white_search_rate = ss60_white/
+  #          ethnic_group_2011_census_white*100) %>% 
+  # mutate(ss60_asian_rate = ss60_asian/
+  #          ethnic_group_2011_census_asian_asian_british*100) %>% 
+  # mutate(ss60_other_ethnicity_rate = ss60_other/
+  #          ethnic_group_2011_census_other_ethnic_group*100) %>% 
 ```
 
-### Hit rates
+### Overall trend 
 
-That is, what proportion of searches, by race, were successful? This proportion is known as the contraband recovery rate, or the "hit rate." If racial groups have different hit rates, it can imply that racial groups are being subjected to different standards.
+Hit rate is, what proportion of searches, by race, were successful? If racial groups have different hit rates, it can imply that racial groups are being subjected to different standards.
 
 ```{r message=False, warning=False, results='asis'}
+# count the number of searches by race
 HR1 <- ss60_london %>% 
   group_by(officer_defined_ethnicity) %>% 
-  summarise(., allSS=n()) %>% 
-  st_drop_geometry()  
-
+  summarise(., searches=n()) %>% 
+  st_drop_geometry()
+  
+# count the number of successful searches leading to arrest 
 HR2 <- ss60_london %>% 
   group_by(officer_defined_ethnicity) %>% 
   filter(outcome=="Arrest") %>% 
-  summarise(., arrest=n()) %>% 
+  summarise(., arrests=n()) %>% 
   st_drop_geometry()
 
+# calculate total population for each race based on 2011 census 
+aP <- sum(as.numeric(all_data$ethnic_group_2011_census_asian_asian_british), na.rm = TRUE)
+bP <- sum(as.numeric(all_data$ethnic_group_2011_census_black_african_caribbean_black_british), na.rm = TRUE)
+wP <- sum(as.numeric(all_data$ethnic_group_2011_census_white), na.rm = TRUE)
+oP <- sum(as.numeric(all_data$ethnic_group_2011_census_other_ethnic_group), na.rm = TRUE)
+
 left_join(HR1, HR2) %>% 
-  mutate(hit_rate = arrest/allSS *100) %>% 
+  mutate(population = c(aP, bP, oP, wP, 0),
+         search_prop = searches/sum(searches),
+         search_rate = searches/population *100,
+         hit_rate = arrests/searches *100) %>% 
+  dplyr::rename(race = "officer_defined_ethnicity") %>% 
   mutate_if(is.numeric, ~round(., 2)) %>% 
-  arrange(desc(hit_rate)) %>% 
   kable(.,)
 ```
 
@@ -1348,23 +1366,30 @@ all_rates <- all_data %>%
   dplyr::select(ends_with("rate") | msoa11cd) 
 ```
 
+```{r}
+wardMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
+                              "London_Ward_CityMerged.shp")) %>% 
+  st_transform(., 27700)
+
+tm_shape(msoaMap) +
+  tm_polygons(col = NA, alpha = 0.5)
+```
+
 ## Spatial autocorrelation
 
 Create a neighborhoods list and spatial weight matrix.
 
-[**Q: when creating a neighborhoods list using poly2nb, before setting 'snap' gives me error and after setting it to 0.01 it runs successfully, but how to determine if 0.01 is a reasonable value since the out map cannot really tell anything.**]{.ul}
-
 ```{r message=FALSE, warning=FALSE}
 library(spdep)
 # calculate centroids of all msoas in London
-coordsM<- all_rates%>%
+coordsM<- wardMap%>%
   st_centroid()%>%
   st_geometry()
 plot(coordsM,axes=TRUE)
 
 # create a neighborhoods list
-LMsoa_nb <- all_rates %>%
-  poly2nb(., queen=T, snap=0.01)  
+LMsoa_nb <- wardMap %>%
+  poly2nb(., queen=T)  
 plot(LMsoa_nb, st_geometry(coordsM), col="red")
 
 # create a spatial weight object
@@ -1374,17 +1399,15 @@ LMsoa_lw <- LMsoa_nb %>%
 
 ### Global Moran's I
 
-[**Q: Should I change all NAs in all_rates to 0? Some of the MSOAs have S&S but with a very low rate like 0.002%. Turning NAs to 0 will give places with no S&S the same color/interpretation as places with low rate, whereas keeping NAs will just show gray on the map. However, keeping NAs seems to create troubles in later statistical tests. For now, I chose to ignore NAs.**]{.ul}
-
 ```{r}
-all_rates %>%
-  pull(avg_household_ss60_rate) %>%
+wardMap %>%
+  pull(HECTARES) %>%
   as.vector()%>%
-  na.omit(all_rates) %>%   # ignore the NA
-  moran.test(., LMsoa_lw, zero.policy = TRUE)
+  #na.omit(all_rates) %>%   # ignore the NA
+  geary.test(., LMsoa_lw, zero.policy = TRUE)
 ```
 
-Make a table of all statical results for all my variables [**Q: How to turn the results into a dataframe with common column names (i.e. Moran I statistic, Expectation, Variance) and each variable's results fill in new rows?**]{.ul}
+Make a table of all statistical results for all my variables
 
 ```{r}
 # variables used for the test
@@ -1415,11 +1438,10 @@ Global Moran's I tells us almost all my variables have some clustering except fo
 ### Geary's C
 
 ```{r}
-all_rates %>%
-  na.omit(all_rates) %>%
-  pull(avg_household_ss60_rate) %>%
+wardMap %>%
+  na.omit(wardMap) %>%
+  pull(HECTARES) %>%
   as.vector()%>%
-  na.omit(all_rates) %>% 
   geary.test(., LMsoa_lw, zero.policy = TRUE)
 ```
 
