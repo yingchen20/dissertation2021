@@ -207,7 +207,7 @@ ss60_london %>%
   kable(., caption = 'Ethnicities for people being S&S (s60) from April 2019 to April 2021')
 ```
 
-###  Trend figure
+### Trend figure
 
 ```{r}
 ss60_london %>% 
@@ -776,7 +776,7 @@ dbplotALL
 
 ## dbscan - only arrest
 
-### Asian 
+### Asian
 
 ```{r message=FALSE,warning=FALSE}
 ss60Arr_asian <- ss60_london %>% 
@@ -1325,7 +1325,7 @@ all_data <- subset(merged, select = -c(msoa_name)) %>%
   #          ethnic_group_2011_census_other_ethnic_group*100) %>% 
 ```
 
-### Overall trend 
+### Overall trend
 
 Hit rate is, what proportion of searches, by race, were successful? If racial groups have different hit rates, it can imply that racial groups are being subjected to different standards.
 
