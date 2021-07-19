@@ -33,6 +33,7 @@ library(plotrix)
 library(spdep)
 library(ggplot2)
 library(ggpubr)
+library(factoextra) 
 ```
 
 ## Understand London Crime in general
@@ -206,8 +207,6 @@ ss60_london %>%
   st_drop_geometry() %>% 
   kable(., caption = 'Ethnicities for people being S&S (s60) from April 2019 to April 2021')
 ```
-
-### Trend figure
 
 ```{r}
 # ss60_london %>% 
@@ -1215,11 +1214,10 @@ all_data <- merged %>%
   # total arrest rate 
   mutate(arrest_rate = total_arrest/total_ss60 *100) %>% 
   # search rate
-  mutate(black_search_rate = ss60_black/ total_ss60 *100) %>% 
-  mutate(white_search_rate = ss60_white/ total_ss60 *100) %>% 
-  mutate(asian_search_rate = ss60_asian/ total_ss60 *100) %>% 
-  mutate(other_search_rate = ss60_other/ total_ss60 *100) %>% 
-  mutate(na_search_rate = ss60_na/ total_ss60 *100) %>% 
+  mutate(black_search_rate = ss60_black/ black_pop *100) %>% 
+  mutate(white_search_rate = ss60_white/ white_pop *100) %>% 
+  mutate(asian_search_rate = ss60_asian/ asian_pop *100) %>% 
+  mutate(other_search_rate = ss60_other/ other_eth_pop *100) %>% 
   # hit rates
   mutate(black_hit_rate = arrest_black/ ss60_black *100) %>% 
   mutate(white_hit_rate = arrest_white/ ss60_white *100) %>% 
@@ -1228,17 +1226,6 @@ all_data <- merged %>%
   mutate(na_hit_rate = arrest_na/ ss60_na *100) %>% 
   mutate_if(is.numeric, ~round(., 2))
 
-```
-
-```{r}
-  # mutate(black_search_rate = ss60_black/
-  #          ethnic_group_2011_census_black_african_caribbean_black_british*100) %>% 
-  # mutate(white_search_rate = ss60_white/
-  #          ethnic_group_2011_census_white*100) %>% 
-  # mutate(ss60_asian_rate = ss60_asian/
-  #          ethnic_group_2011_census_asian_asian_british*100) %>% 
-  # mutate(ss60_other_ethnicity_rate = ss60_other/
-  #          ethnic_group_2011_census_other_ethnic_group*100) %>% 
 ```
 
 ### Overall trend
@@ -1266,13 +1253,90 @@ wP <- sum(as.numeric(all_data$white_pop), na.rm = TRUE)
 oP <- sum(as.numeric(all_data$other_eth_pop), na.rm = TRUE)
 
 left_join(HR1, HR2) %>% 
-  mutate(population = c(aP, bP, oP, wP, 0),
-         search_prop = searches/sum(searches),
+  mutate(search_prop = searches/sum(searches) *100,
+         arrest_prop = arrests/sum(arrests) *100,
+         population = c(aP, bP, oP, wP, 0),
+         population_prop = population/sum(population) *100,
          search_rate = searches/population *100,
          hit_rate = arrests/searches *100) %>% 
   dplyr::rename(race = "officer_defined_ethnicity") %>% 
-  mutate_if(is.numeric, ~round(., 2)) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
   kable(.,)
+```
+
+### Search rate & Hit rate comparison
+
+```{r message=FALSE, warning=FALSE}
+# select columns we need 
+cols_s <- c("ward_code",
+          "black_search_rate", 
+          "white_search_rate", 
+          "asian_search_rate", 
+          "other_search_rate")
+cols_h <- c("black_hit_rate",
+            "white_hit_rate",
+            "asian_hit_rate",
+            "other_hit_rate",
+            "ward_code")
+search_data <- all_data[cols_s]
+hit_data <- all_data[cols_h]
+
+# pivot longer 
+search_df <- search_data %>% 
+  st_drop_geometry() %>% 
+  pivot_longer(cols = ends_with("search_rate"),
+               names_to = c("race", ".value"),
+               names_sep = '\\_') 
+
+hit_df <- hit_data %>% 
+  st_drop_geometry() %>% 
+  pivot_longer(cols = ends_with("hit_rate"),
+               names_to = c("race", ".value"),
+               names_sep = '\\_')
+# join two df
+main_data <- left_join(search_df, hit_df) %>% 
+  rename(search_rate = "search",
+         hit_rate = "hit") 
+```
+
+Compare search rate vs. hit rate for each race
+
+```{r message=FALSE, warning=FALSE}
+# We'll use this just to make our axes' limits nice and even
+max_hit_rate <-
+  main_data %>% 
+  dplyr::select("hit_rate") %>% 
+  max()
+
+max_search_rate <-
+  main_data %>% 
+  dplyr::select("search_rate") %>% 
+  max()
+
+main_data %>% 
+  ggplot(aes(
+    x = search_rate,
+    y = hit_rate
+  )) +
+  geom_point() +
+  # This sets a diagonal reference line (line of equal search and hit rates)
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  # These next few lines just make the axes pretty and even
+  scale_x_continuous("Search rate (%)", 
+    limits = c(0, max_search_rate + 0.01)
+  ) +
+  scale_y_continuous("Hit rate (%)", 
+    limits = c(0, max_hit_rate + 0.01)
+  ) +
+  # This makes sure that 1% on the x-axis is the same as 1% on the y-axis
+  coord_fixed() +
+  facet_wrap(. ~ race, nrow = 2)
+```
+
+Compare white hit rate with minorities' hit rate
+
+```{r}
+
 ```
 
 Create a subset data of all rates for later parts.
@@ -1288,15 +1352,15 @@ Create a neighborhoods list and spatial weight matrix.
 
 ```{r message=FALSE, warning=FALSE}
 library(spdep)
-# calculate centroids of all msoas in London
-coordsM<- wardMap%>%
+# calculate centroids 
+coordsM<- all_rates%>%
   st_centroid()%>%
   st_geometry()
 plot(coordsM,axes=TRUE)
 
 # create a neighborhoods list
-Lward_nb <- wardMap %>%
-  poly2nb(., queen=T)  
+Lward_nb <- all_rates %>%
+  poly2nb(., queen=T, snap=0.00001)  
 plot(Lward_nb, st_geometry(coordsM), col="red")
 
 # create a spatial weight object
@@ -1309,10 +1373,12 @@ Lward_lw <- Lward_nb %>%
 variables to test for spatial autocorrelation:
 
 ```{r}
+# convert NA to zeros
+all_rates[is.na(all_rates)] <- 0
 colnames(all_rates)
 ```
 
-Make a table of all statistical results for all my variables
+Moran's I test tells us whether we have clustered values (close to 1) or dispersed values (close to -1).
 
 ```{r}
 # variables used for the test
@@ -1323,7 +1389,6 @@ variable_names <- c( "household_vio_rate",
                      "white_search_rate",
                      "asian_search_rate",
                      "other_search_rate",
-                     "na_search_rate",
                      "black_hit_rate",
                      "white_hit_rate",
                      "asian_hit_rate",
@@ -1349,24 +1414,18 @@ datalist
 
 ```
 
-Global Moran's I tells us almost all my variables have some clustering except for arrest rate and ss60 for white people, showing police tend to randomly stop and search white people but intentionally or on purpose to search black and Asian people.
-
 ### Geary's C
 
-```{r}
-all_rates %>%
-  na.omit(all_rates) %>%
-  pull(na_hit_rate) %>%
-  as.vector()%>%
-  geary.test(., Lward_lw, zero.policy = TRUE)
+It tells us whether similar values or dissimilar values are clusering. Geary's C falls between 0 and 2; 1 means no spatial autocorrelation, \<1 - positive spatial autocorrelation or similar values clustering, \>1 - negative spatial autocorreation or dissimilar values clustering.
 
+```{r}
 # function to compute coefficient
 cal_coef <- function(x) {
   all_rates %>% 
     pull(x) %>% 
     as.vector() %>% 
     na.omit(all_rates) %>%
-    geary.test(., LMsoa_lw, zero.policy = TRUE)
+    geary.test(., Lward_lw, zero.policy = TRUE)
 }
 
 datalist = list()
@@ -1379,30 +1438,143 @@ datalist
 
 ### General G
 
-```{r eval=FALSE, include=FALSE}
-all_rates %>%
-  na.omit(all_rates) %>% 
-  pull(black_search_rate) %>%
-  as.vector()%>%
-  globalG.test(., Lward_lw, zero.policy = TRUE)
+It tells us whether high or low values are clustering. If G \> Expected = High values clustering; if G \< expected = low values clustering.
 
-all_rates %>%
-  pull(black_search_rate) %>%
-  as.vector()%>%
-  na.omit(all_rates) %>% 
-  geary.test(., Lward_lw, zero.policy = TRUE)
+```{r message=FALSE}
+# function to compute coefficient
+cal_coef <- function(x) {
+  all_rates %>% 
+    pull(x) %>% 
+    as.vector() %>% 
+    na.omit(all_rates) %>%
+    globalG.test(., Lward_lw, zero.policy = TRUE)
+}
+
+datalist = list()
+for (aVar in variable_names) {
+  dat <- list(cal_coef(x = aVar)$estimate)
+  datalist[[aVar]] <- dat
+}
+datalist
 ```
 
 ### Local Moran's I
 
+Calculate local Moran's I for several important variables for inspecting racial discrimination of search rate and hit rate.
+
 ```{r eval=FALSE, include=FALSE}
-cal_loc_moran <- all_rates %>%
+moranI_black_search <- all_rates %>%
   pull(black_search_rate) %>%
   as.vector()%>%
-  na.omit(all_rates) %>% 
   localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
 
+moranI_white_search <- all_rates %>% 
+  pull(white_search_rate) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_asian_search <- all_rates %>% 
+  pull(asian_search_rate) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_black_hit <- all_rates %>% 
+  pull(black_hit_rate) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_white_hit <- all_rates %>% 
+  pull(white_hit_rate) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_asian_hit <- all_rates %>% 
+  pull(asian_hit_rate) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+```
+
+copy the Moran's I score and the z-score standard deviation back to all_rates dataframe
+
+```{r}
+all_rates <- all_rates %>% 
+  mutate(black_search_Iz = as.numeric(moranI_black_search$Z.Ii)) %>% 
+  mutate(white_search_Iz = as.numeric(moranI_white_search$Z.Ii)) %>% 
+  mutate(asian_search_Iz = as.numeric(moranI_asian_search$Z.Ii)) %>% 
+  mutate(black_hit_Iz = as.numeric(moranI_black_hit$Z.Ii)) %>% 
+  mutate(white_hit_Iz = as.numeric(moranI_white_hit$Z.Ii)) %>% 
+  mutate(asian_hit_Iz = as.numeric(moranI_asian_hit$Z.Ii))
+```
+
+We'll set the breaks manually based on the rule that data points \>2.58 or \<-2.58 standard deviations away from the mean are significant at the 99% level (\<1% chance that autocorrelation not present); \>1.96 - \<2.58 or \<-1.96 to \>-2.58 standard deviations are significant at the 95% level (\<5% change that autocorrelation not present). \>1.65 = 90% etc.
+
+```{r}
+breaks1<-c(-1000,-2.58,-1.96,-1.65,1.65,1.96,2.58,1000)
+MoranColours<- rev(brewer.pal(8, "RdGy"))
+
+tm_shape(all_rates) +
+    tm_polygons("black_search_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette=MoranColours,
+        midpoint=NA,
+        title="Local Moran's I, Black Search in London")
+```
+
+```{r}
+tm_shape(all_rates) +
+    tm_polygons("white_search_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette=MoranColours,
+        midpoint=NA,
+        title="Local Moran's I, White Search in London")
+```
+
+```{r}
+tm_shape(all_rates) +
+    tm_polygons("asian_search_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette=MoranColours,
+        midpoint=NA,
+        title="Local Moran's I, Asian Search in London")
+```
+
+```{r}
+tm_shape(all_rates) +
+    tm_polygons("black_hit_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette=MoranColours,
+        midpoint=NA,
+        title="Local Moran's I, Black Hit in London")
+```
+
+```{r}
+tm_shape(all_rates) +
+    tm_polygons("white_hit_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette=MoranColours,
+        midpoint=NA,
+        title="Local Moran's I, White Hit in London")
+```
+
+```{r}
+tm_shape(all_rates) +
+    tm_polygons("asian_hit_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette=MoranColours,
+        midpoint=NA,
+        title="Local Moran's I, Asian Hit in London")
 ```
 
 ## Agglomerative Hierarchical Clustering
@@ -1414,10 +1586,9 @@ library(tidyverse)  # data manipulation
 library(cluster)    # clustering algorithms
 library(factoextra) # clustering visualization
 
-df <- subset(all_rates,select=-msoa11cd) %>% 
+df <- subset(all_rates,select=-ward_code) %>% 
   st_drop_geometry() %>% 
   scale(.)
-
 ```
 
 To determine which clustering method I choose use, agnes function can calculate the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure).
@@ -1457,12 +1628,12 @@ fviz_nbclust(df, FUN = hcut, method = "wss")
 
 # k=5
 plot(hc, cex = 0.6, hang=-1, labels=FALSE)
-rect.hclust(hc, k = 5, border = 2:5)
+rect.hclust(hc, k = 10, border = 2:5)
 ```
 
 ```{r}
 # Cut tree into 5 groups
-sub_grp <- cutree(hc, k = 5)
+sub_grp <- cutree(hc, k = 4)
 
 # Number of members in each cluster
 table(sub_grp)
@@ -1472,8 +1643,6 @@ We can see cluster 4 and 5 has very few obervations so the density of clusters i
 
 ### Explore cluster characteristics
 
-[**Q: Do I need to scale df_cluster before taking the median?** ]
-
 ```{r message=False, warning=False, results='asis'}
 # assign clusters back to rate df
 df_cluster <- subset(all_rates) %>% 
@@ -1482,15 +1651,7 @@ df_cluster <- subset(all_rates) %>%
 df_cluster%>% 
   st_drop_geometry() %>% 
   group_by(cluster) %>% 
-  na.omit(.) %>% 
-  summarise(across(economic_activity_2011_census_unemployment_rate:ss60_other_ethnicity_rate, median)) %>% 
-  dplyr::rename(unemploymentR = "economic_activity_2011_census_unemployment_rate",
-                violeceR = "avg_household_vio_rate",
-                total_ss60R = "avg_household_ss60_rate",
-                black_ss60R = "ss60_black_rate",
-                white_ss60R = "ss60_white_rate",
-                asian_ss60R = "ss60_asian_rate",
-                other_ss60R = "ss60_other_ethnicity_rate") %>% 
+  summarise(across(black_search_rate:na_hit_rate, median)) %>% 
   kable(., caption = 'Cluster Statistics')
 ```
 
