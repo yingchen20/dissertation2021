@@ -201,11 +201,25 @@ What are the most common ethnicity of people being S&S for potential violence? (
 
 ```{r message=False, warning=False, results='asis'}
 ss60_london %>% 
-  group_by(outcome, officer_defined_ethnicity) %>% 
+  group_by(outcome) %>% 
   summarise(., count=n(),) %>%
-  arrange(outcome, officer_defined_ethnicity, desc(count)) %>% 
+  mutate(prop = count/sum(count) *100) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
+  arrange(desc(prop)) %>% 
   st_drop_geometry() %>% 
-  kable(., caption = 'Ethnicities for people being S&S (s60) from April 2019 to April 2021')
+  kable(.)
+```
+
+```{r message=False, warning=False, results='asis'}
+ss60_london %>%  
+  filter(outcome == "Arrest") %>% 
+  group_by(officer_defined_ethnicity) %>% 
+  summarise(., count=n()) %>%
+  mutate(prop = count/sum(count) *100) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
+  arrange(desc(prop)) %>% 
+  st_drop_geometry() %>% 
+  kable(.)
 ```
 
 ```{r}
@@ -238,6 +252,11 @@ tm_shape(wardMap) +
   tm_shape(ss60_london) +
   tm_dots(col = "red") +
   tm_layout(main.title= "S&S (section 60) London April 2019 to April 2021", 
+            main.title.size=1)
+
+tm_shape(all_data) + 
+  tm_polygons(col = "black_hit_rate", alpha = 0.5) +
+  tm_layout(main.title= "Black search", 
             main.title.size=1)
 ```
 
@@ -1297,6 +1316,9 @@ hit_df <- hit_data %>%
 main_data <- left_join(search_df, hit_df) %>% 
   rename(search_rate = "search",
          hit_rate = "hit") 
+
+# convert NAs to zero
+main_data[is.na(main_data)] <- 0
 ```
 
 Compare search rate vs. hit rate for each race
@@ -1336,7 +1358,86 @@ main_data %>%
 Compare white hit rate with minorities' hit rate
 
 ```{r}
+# Reshape table to show hit rates of minorities vs white 
+main_data_white <- main_data %>% 
+  dplyr::select(-search_rate) %>% 
+  spread(race, hit_rate, fill=0) %>% 
+  rename(white_hit_rate = white) %>% 
+  gather(minority_race, minority_hit_rate, c(black, asian, other)) %>%
+  arrange(ward_code)
+```
 
+Plot
+
+```{r}
+max_hit_rate <-
+  main_data_white %>% 
+  dplyr::select(ends_with("hit_rate")) %>% 
+  max()
+
+main_data_white %>% 
+  ggplot(aes(
+    x = white_hit_rate,
+    y = minority_hit_rate
+  )) +
+  geom_point() +
+  # This sets a diagonal reference line (line of equal hit rates)
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  # These next few lines just make the axes pretty and even
+  scale_x_continuous("White hit rate", 
+    limits = c(0, max_hit_rate + 0.01)
+  ) +
+  scale_y_continuous("Minority hit rate", 
+    limits = c(0, max_hit_rate + 0.01)
+  ) +
+  # This makes sure that 1% on the x-axis is the same as 1% on the y-axis
+  coord_fixed() +
+  # This allows us to compare black v. white and Hispanic v. white side by
+  # side, in panels
+  facet_grid(. ~ minority_race)
+```
+
+Add the number of searches to the hit rate df
+
+```{r}
+search_count <- all_data %>% 
+  dplyr::select("ward_code", "ss60_asian", "ss60_black", "ss60_white", "ss60_other") %>% 
+  st_drop_geometry(.) %>% 
+  pivot_longer(cols = ! (ward_code | ss60_white),
+               names_to = "minority_race",
+               names_prefix = "ss60_",
+               values_to = "minority_search_counts") %>% 
+  rename(white_search_counts = ss60_white) %>% 
+  arrange(ward_code)
+
+# convert NAs to zero
+search_count[is.na(search_count)] <- 0
+
+# join df
+main_data_white <- left_join(main_data_white, 
+                             search_count, 
+                             by = c("ward_code", "minority_race")) %>% 
+  mutate(all_search_count = minority_search_counts + white_search_counts)
+```
+
+plot
+
+```{r}
+main_data_white %>% 
+  ggplot(aes(
+    x = white_hit_rate,
+    y = minority_hit_rate
+  )) +
+  geom_point(aes(color=all_search_count, size=all_search_count), pch = 18) +
+  scale_fill_viridis_c(option = "viridis",
+                       aesthetics = c("colour", "fill")) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_x_continuous("White hit rate", 
+    limits = c(0, max_hit_rate + 0.01)) +
+  scale_y_continuous("Minority hit rate", 
+    limits = c(0, max_hit_rate + 0.01)) +
+  coord_fixed() +
+  facet_grid(. ~ minority_race)
 ```
 
 Create a subset data of all rates for later parts.
@@ -1522,7 +1623,7 @@ tm_shape(all_rates) +
     tm_polygons("black_search_Iz",
         style="fixed",
         breaks=breaks1,
-        palette=MoranColours,
+        palette= "viridis",
         midpoint=NA,
         title="Local Moran's I, Black Search in London")
 ```
@@ -1633,13 +1734,13 @@ rect.hclust(hc, k = 10, border = 2:5)
 
 ```{r}
 # Cut tree into 5 groups
-sub_grp <- cutree(hc, k = 4)
+sub_grp <- cutree(hc, k = 3)
 
 # Number of members in each cluster
 table(sub_grp)
 ```
 
-We can see cluster 4 and 5 has very few obervations so the density of clusters is very different.
+We can see cluster 4 and 5 has very few observations so the density of clusters is very different.
 
 ### Explore cluster characteristics
 
@@ -1651,14 +1752,9 @@ df_cluster <- subset(all_rates) %>%
 df_cluster%>% 
   st_drop_geometry() %>% 
   group_by(cluster) %>% 
-  summarise(across(black_search_rate:na_hit_rate, median)) %>% 
+  #summarise(across(black_search_rate:na_hit_rate, median)) %>% 
+  summarise(across(econ_inac_rate:na_hit_rate, median)) %>% 
   kable(., caption = 'Cluster Statistics')
-```
-
-Make Facet Grid (Looks like this which is made by seaborn in python)
-
-```{r echo = FALSE}
-knitr::include_graphics("/Users/yingchen/Documents2/CASA/spatial_capture/final project/Output/sample_in_python.jpg")
 ```
 
 Plot the cluster map
@@ -1669,3 +1765,9 @@ tm_shape(df_cluster) +
 ```
 
 ## GWR
+
+From the hierarchical clustering result we can see variables such as unemployment rate, lone parent without employment rate, etc are positively correlated with search rate and hit rate. Therefore, it is reasonable to investigate their relationships more thoroughly.
+
+```{r}
+
+```
