@@ -1077,7 +1077,6 @@ The demographic data was obtained from <https://data.london.gov.uk/dataset/msoa-
 ```{r message=FALSE, warning=FALSE}
 wardData <- read_csv("https://data.london.gov.uk/download/ward-profiles-and-atlas/150584ff-3509-4e17-91d1-315ed4557419/ward-atlas-data.csv",na = c("NA", "n/a")) %>% 
   clean_names() 
-
 ```
 
 Clean up column names
@@ -1098,8 +1097,7 @@ wardData <- wardData[2:626,]
 
 Columns we need:
 
-> -   "population_and_age_all_ages_2011",
-> -   "household_composition_household_composition_2001_census_all_households",
+> -   "population_and_age_all_ages_2011"
 >
 > *the above can calculate violent crime rate and overall S&S rate by dividing by the number of crimes/S&S in each geographic unit*
 >
@@ -1112,23 +1110,21 @@ Columns we need:
 >
 > -   "household_income_mean_modelled_household_income_2012_13",
 > -   "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
-> -   "employment_economic_activity_percentages_2011_census_aged_16_to_24_percent_unemployed",
 > -   "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
 > -   "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
 >
-> *the above might be useful if to calculate spatial autocorrelation between S&S rate and income/economically inactive rate*
+> *the above might be useful if to investigate spatial autocorrelation between S&S rate and income/economically inactive rate*
 
 ```{r message=FALSE, warning=FALSE}
 cols <- c(
 "new_code",
 "population_and_age_all_ages_2011",
-"household_composition_household_composition_2001_census_all_households",
 "diversity_ethnic_group_5_groups_2011_census_white",
 "diversity_ethnic_group_5_groups_2011_census_asian_or_asian_british",
 "diversity_ethnic_group_5_groups_2011_census_black_or_black_british",                         
-"diversity_ethnic_group_5_groups_2011_census_other",                        
+"diversity_ethnic_group_5_groups_2011_census_other",
+"household_income_mean_modelled_household_income_2012_13",
 "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
-"employment_economic_activity_percentages_2011_census_aged_16_to_24_percent_unemployed",
 "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
 "qualifications_qualifications_and_students_2011_census_percent_no_qualifications")
 
@@ -1137,21 +1133,20 @@ wardDataMerged <-
             wardData %>% dplyr::select(all_of(cols)),
             by = c("GSS_CODE" = "new_code")) %>% 
   rename(all_population = "population_and_age_all_ages_2011",
-         all_households = "household_composition_household_composition_2001_census_all_households",
          white_pop = "diversity_ethnic_group_5_groups_2011_census_white",
          asian_pop = "diversity_ethnic_group_5_groups_2011_census_asian_or_asian_british",
          black_pop = "diversity_ethnic_group_5_groups_2011_census_black_or_black_british",
          otherEth_pop = "diversity_ethnic_group_5_groups_2011_census_other",
          econ_inac_rate = "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
-         unemployed_16to24_rate = "employment_economic_activity_percentages_2011_census_aged_16_to_24_percent_unemployed",
+         mean_income_rate = "household_income_mean_modelled_household_income_2012_13",
          unemployed_loneParent_rate = "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
          no_qualification_rate = "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
          ward_name = "NAME",
          ward_code = "GSS_CODE") 
 
 # convert column types to numeric
-cols.num <- c("all_population", "all_households", "white_pop", "asian_pop",
-              "black_pop", "otherEth_pop", "econ_inac_rate", "unemployed_16to24_rate",
+cols.num <- c("all_population",  "white_pop", "asian_pop",
+              "black_pop", "otherEth_pop", "econ_inac_rate", "mean_income_rate",
               "unemployed_loneParent_rate", "no_qualification_rate")
 wardDataMerged[cols.num] <- sapply(wardDataMerged[cols.num],as.numeric)
 
@@ -1224,20 +1219,21 @@ Calculate rates.
 ```{r message=FALSE}
 all_data <- merged %>% 
   clean_names() %>%   
-  # violent crime rate 
-  mutate(household_vio_rate = total_violent_crime/
-           all_households *100) %>% 
+  # total violent crime rate 
+  mutate(total_vio_rate = total_violent_crime/
+           all_population *100) %>% 
   # total S&S rate
-  mutate(household_search_rate = total_ss60 / 
-           all_households *100) %>% 
-  # total arrest rate 
-  mutate(arrest_rate = total_arrest/total_ss60 *100) %>% 
-  # search rate
+  mutate(total_search_rate = total_ss60 / 
+           all_population *100) %>%
+  # total hit rate 
+  mutate(total_hit_rate = total_arrest /
+           total_ss60 *100) %>% 
+  # search rate for ethical groups 
   mutate(black_search_rate = ss60_black/ black_pop *100) %>% 
   mutate(white_search_rate = ss60_white/ white_pop *100) %>% 
   mutate(asian_search_rate = ss60_asian/ asian_pop *100) %>% 
   mutate(other_search_rate = ss60_other/ other_eth_pop *100) %>% 
-  # hit rates
+  # hit rates for ethical groups 
   mutate(black_hit_rate = arrest_black/ ss60_black *100) %>% 
   mutate(white_hit_rate = arrest_white/ ss60_white *100) %>% 
   mutate(asian_hit_rate = arrest_asian/ ss60_asian *100) %>% 
@@ -1483,9 +1479,9 @@ Moran's I test tells us whether we have clustered values (close to 1) or dispers
 
 ```{r}
 # variables used for the test
-variable_names <- c( "household_vio_rate",
-                     "household_search_rate",
-                     "arrest_rate",
+variable_names <- c( "total_vio_rate",
+                     "total_search_rate",
+                     "total_hit_rate",
                      "black_search_rate",
                      "white_search_rate",
                      "asian_search_rate",
@@ -1619,63 +1615,126 @@ We'll set the breaks manually based on the rule that data points \>2.58 or \<-2.
 breaks1<-c(-1000,-2.58,-1.96,-1.65,1.65,1.96,2.58,1000)
 MoranColours<- rev(brewer.pal(8, "RdGy"))
 
-tm_shape(all_rates) +
-    tm_polygons("black_search_Iz",
+
+t1 <- tm_shape(all_rates) + 
+  tm_polygons("black_search_Iz",
         style="fixed",
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I, Black Search in London")
-```
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, Black S&S search rate in London", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(a)", position=c(0,0.8), size=1.5)
 
-```{r}
-tm_shape(all_rates) +
-    tm_polygons("white_search_Iz",
+
+t2 <- tm_shape(all_rates) + 
+  tm_polygons("white_search_Iz",
         style="fixed",
         breaks=breaks1,
-        palette=MoranColours,
+        palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I, White Search in London")
-```
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, White S&S search rate in London", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(b)", position=c(0,0.8), size=1.5)
 
-```{r}
-tm_shape(all_rates) +
-    tm_polygons("asian_search_Iz",
+t3 <- tm_shape(all_rates) + 
+  tm_polygons("asian_search_Iz",
         style="fixed",
         breaks=breaks1,
-        palette=MoranColours,
+        palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I, Asian Search in London")
-```
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, Asian S&S search rate in London", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(c)", position=c(0,0.8), size=1.5)
 
-```{r}
-tm_shape(all_rates) +
-    tm_polygons("black_hit_Iz",
+t4 <- tm_shape(all_rates) + 
+  tm_polygons("black_hit_Iz",
         style="fixed",
         breaks=breaks1,
-        palette=MoranColours,
+        palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I, Black Hit in London")
-```
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, Black S&S hit rate in London", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(d)", position=c(0,0.8), size=1.5)
 
-```{r}
-tm_shape(all_rates) +
-    tm_polygons("white_hit_Iz",
+t5 <- tm_shape(all_rates) + 
+  tm_polygons("white_hit_Iz",
         style="fixed",
         breaks=breaks1,
-        palette=MoranColours,
+        palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I, White Hit in London")
-```
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, White S&S hit rate in London", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(e)", position=c(0,0.8), size=1.5)
 
-```{r}
-tm_shape(all_rates) +
-    tm_polygons("asian_hit_Iz",
+t6 <- tm_shape(all_rates) + 
+  tm_polygons("asian_hit_Iz",
         style="fixed",
         breaks=breaks1,
-        palette=MoranColours,
+        palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I, Asian Hit in London")
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, Asian S&S hit rate in London", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(f)", position=c(0,0.8), size=1.5)
+
+
+t=tmap_arrange(t1, t2, t3, t4, t5, t6)
+
+t
 ```
 
 ## Agglomerative Hierarchical Clustering
@@ -1720,27 +1779,23 @@ hc <- hclust(d, method = "ward.D2")
 plot(hc, hang=-1, labels=FALSE)
 ```
 
-To determine the optimal cluster number: 1. Elbow Method 2. Average Silhouette Method (haven't explored yet)
+To determine the optimal cluster number:
+
+1\. Elbow Method 2. Average Silhouette Method (haven't explored yet)
 
 ```{r}
 # use Elbow Method first  
 library(factoextra)
 fviz_nbclust(df, FUN = hcut, method = "wss")
-
-# k=5
-plot(hc, cex = 0.6, hang=-1, labels=FALSE)
-rect.hclust(hc, k = 10, border = 2:5)
 ```
 
 ```{r}
-# Cut tree into 5 groups
-sub_grp <- cutree(hc, k = 3)
+# Cut tree into 4 groups
+sub_grp <- cutree(hc, k = 4)
 
 # Number of members in each cluster
 table(sub_grp)
 ```
-
-We can see cluster 4 and 5 has very few observations so the density of clusters is very different.
 
 ### Explore cluster characteristics
 
@@ -1752,7 +1807,6 @@ df_cluster <- subset(all_rates) %>%
 df_cluster%>% 
   st_drop_geometry() %>% 
   group_by(cluster) %>% 
-  #summarise(across(black_search_rate:na_hit_rate, median)) %>% 
   summarise(across(econ_inac_rate:na_hit_rate, median)) %>% 
   kable(., caption = 'Cluster Statistics')
 ```
@@ -1768,6 +1822,131 @@ tm_shape(df_cluster) +
 
 From the hierarchical clustering result we can see variables such as unemployment rate, lone parent without employment rate, etc are positively correlated with search rate and hit rate. Therefore, it is reasonable to investigate their relationships more thoroughly.
 
-```{r}
+### Observation plot
 
+```{r}
+tm1 <- tm_shape(all_rates) + 
+  tm_fill("mean_income_rate", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="mean income rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(a)", position=c(0,0.6), size=1)
+
+tm2 <- tm_shape(all_rates) + 
+  tm_fill("econ_inac_rate", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="economic inactivity rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(b)", position=c(0,0.6), size=1)
+
+
+tm3 <- tm_shape(all_rates) + 
+  tm_fill("unemployed_lone_parent_rate", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="lone parent not in employment rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(c)", position=c(0,0.6), size=1)
+
+tm4 <- tm_shape(all_rates) + 
+  tm_fill("no_qualification_rate", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="no qualification rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(d)", position=c(0,0.6), size=1)
+
+tm5 <- tm_shape(all_rates) + 
+  tm_fill("total_vio_rate", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="wards violent crime rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(e)", position=c(0,0.6), size=1)
+
+tm6 <- tm_shape(all_rates) + 
+  tm_fill("total_search_rate", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="wards S&S (section 60) search rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(f)", position=c(0,0.6), size=1)
+
+tm7 <- tm_shape(all_rates) + 
+  tm_fill("total_hit_rate", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="wards S&S (section 60) hit rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(g)", position=c(0,0.6), size=1)
+
+tm =tmap_arrange(tm1, tm2, tm3, tm4, tm5, tm6, tm7)
+
+tm
+```
+
+### Research Hypothesis
+
+1.  Is search rate correlated (positively or negatively) to hit rate for any ethical group?
+2.  Is search rate or hit rate correlated to violent crime rate -- proving police's actions are effective or not
+3.  What are the factors that might lead to variation in search rate across the city?
+
+```{r}
+colnames(all_data)
+```
+
+```{r message=FALSE, warning=FALSE}
+all_data[is.na(all_data)] <- 0
+
+q <- qplot(x = ss60_black, 
+           y = arrest_black,
+           data = all_data)
+
+#plot with a regression line - note, I've added some jitter here as the x-scale is rounded
+q + stat_smooth(method="lm", se=FALSE, size=1) + 
+  geom_jitter()
 ```
