@@ -1939,14 +1939,165 @@ tm
 colnames(all_data)
 ```
 
+Check variable's distribution
+
+1.  total search rate
+
+```{r}
+summary(all_data$total_search_rate)
+
+ggplot(all_data, aes(x=total_search_rate)) + 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+2.  total hit rate
+
+```{r}
+summary(all_data$total_hit_rate)
+
+ggplot(all_data, aes(x=total_hit_rate)) + 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 5) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+3.  total violent crime rate
+
+```{r}
+summary(all_data$total_vio_rate)
+
+ggplot(all_data, aes(x=total_vio_rate)) + 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+4.  total search counts
+
+```{r}
+summary(all_data$total_ss60)
+
+ggplot(all_data, aes(x=total_ss60)) + 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 10) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+5.  total arrest counts
+
+```{r}
+summary(all_data$total_arrest)
+
+ggplot(all_data, aes(x=total_arrest)) + 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+6.  total violent crime counts
+
+```{r}
+summary(all_data$total_violent_crime)
+
+ggplot(all_data, aes(x=total_violent_crime)) + 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 50) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+#### arrest count & search count
+
 ```{r message=FALSE, warning=FALSE}
+library(broom)
 all_data[is.na(all_data)] <- 0
 
-q <- qplot(x = ss60_black, 
-           y = arrest_black,
+q <- qplot(x = total_ss60, 
+           y = total_arrest,
            data = all_data)
 
 #plot with a regression line - note, I've added some jitter here as the x-scale is rounded
 q + stat_smooth(method="lm", se=FALSE, size=1) + 
   geom_jitter()
+
+model1 <- all_data %>%
+  lm(total_arrest ~ total_ss60, data=.)
+
+# summary stats
+tidy(model1)
+glance(model1)
+```
+
+#### hit rate & search rate 
+
+Q: scatter plot shows non-linear patterns, should I take log-transformation to my variables or fit to a non-linear model?
+
+```{r message=FALSE, warning=FALSE}
+q <- qplot(x = total_search_rate, 
+           y = total_hit_rate,
+           data = all_data)
+
+#plot with a regression line - note, I've added some jitter here as the x-scale is rounded
+q + stat_smooth(method="lm", se=FALSE, size=1) + 
+  geom_jitter()
+
+model1 <- all_data %>%
+  lm(total_hit_rate ~ total_search_rate, data=.)
+
+# summary stats
+tidy(model1)
+glance(model1)
+```
+
+**Tukey's ladder of transformations**
+
+```{r}
+ggplot(all_data, aes(x=log(total_search_rate)) )+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.5) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+```{r}
+#install.packages("car")
+library(car)
+symbox(~total_hit_rate, 
+       all_data, 
+       na.rm=T,
+       powers=seq(-3,3,by=.5))
+```
+
+```{r}
+ggplot(all_data, aes(x=(total_search_rate)^-1))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 5) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
+
+```{r message=FALSE, warning=FALSE}
+q <- qplot(x = (total_search_rate)^-1, 
+           y = (total_hit_rate)^-1,
+           data = all_data)
+
+#plot with a regression line - note, I've added some jitter here as the x-scale is rounded
+q + stat_smooth(method="lm", se=FALSE, size=1) + 
+  geom_jitter()
+
 ```
