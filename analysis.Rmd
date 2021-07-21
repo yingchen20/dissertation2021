@@ -46,10 +46,6 @@ boroMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI"
                               "London_Borough_Excluding_MHW.shp"))%>%
   st_transform(., 27700)
 
-lsoaMap  <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
-                              "LSOA_2011_London_gen_MHW.shp"))%>%
-  st_transform(., 27700)
-
 wardMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
                               "London_Ward_CityMerged.shp")) %>% 
   st_transform(., 27700)
@@ -105,7 +101,7 @@ crime<- crime %>%
            crs = 4326) %>% 
   st_transform(., 27700) 
 
-crime_london <- crime[boroMap,]
+crime_london <- crime[wardMap,]
 ```
 
 Create a table counting crime numbers for each type.
@@ -175,7 +171,7 @@ ss <- ss %>%
            crs = 4326) %>% 
   st_transform(., 27700) 
 
-ss_london <- ss[boroMap,]
+ss_london <- ss[wardMap,]
 ```
 
 What are the common legislation and search object during S&S?
@@ -1070,9 +1066,9 @@ leaflet(data = clusters) %>%
 
 ## Add demographic data
 
-We have explored the point pattern analysis for London S&S and how about looking at MSOAs, wards or boroughs as a whole? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by MSOA (averaged with 8,346 population in 2010) and there are 983 MSOAs in London.
+We have explored the point pattern analysis for London S&S and what about the ward patterns? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by ward.
 
-The demographic data was obtained from <https://data.london.gov.uk/dataset/msoa-atlas>.
+The demographic data was obtained from <https://data.london.gov.uk/dataset/ward-profiles-and-atlas>.
 
 ```{r message=FALSE, warning=FALSE}
 wardData <- read_csv("https://data.london.gov.uk/download/ward-profiles-and-atlas/150584ff-3509-4e17-91d1-315ed4557419/ward-atlas-data.csv",na = c("NA", "n/a")) %>% 
@@ -1222,6 +1218,8 @@ all_data <- merged %>%
   # total violent crime rate 
   mutate(total_vio_rate = total_violent_crime/
            all_population *100) %>% 
+  mutate(total_vio_prop = total_violent_crime/
+           sum(total_violent_crime) *100) %>% 
   # total S&S rate
   mutate(total_search_rate = total_ss60 / 
            all_population *100) %>%
@@ -1419,12 +1417,15 @@ main_data_white <- left_join(main_data_white,
 plot
 
 ```{r}
+main_data_white_nonzero <- main_data_white %>% 
+  filter(all_search_count != 0 )
+
 main_data_white %>% 
   ggplot(aes(
     x = white_hit_rate,
     y = minority_hit_rate
   )) +
-  geom_point(aes(color=all_search_count, size=all_search_count), pch = 18) +
+  geom_point(aes(color=all_search_count, size=all_search_count), pch = 21) +
   scale_fill_viridis_c(option = "viridis",
                        aesthetics = c("colour", "fill")) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
@@ -1434,6 +1435,38 @@ main_data_white %>%
     limits = c(0, max_hit_rate + 0.01)) +
   coord_fixed() +
   facet_grid(. ~ minority_race)
+```
+
+### Investigate anomalies
+
+There are many wards that do not have any of the S&S (60), let's extract them and compare with its violent crime rate
+
+```{r message=FALSE, warning=FALSE}
+# extract wards with zero S&S 60 and compare their violent crime rate with the London average
+all_data[is.na(all_data)] <- 0
+no_ss <- all_data %>% 
+  filter(total_ss60 == 0) %>% 
+  dplyr::select(ward_code, ward_name, total_violent_crime, total_vio_prop) %>% 
+  arrange(desc(total_vio_prop)) %>% 
+  mutate(LDcompare = case_when(total_vio_prop > 0.1602 ~ "above London average",
+                               TRUE ~ "below London average")) 
+no_ss %>% 
+  st_drop_geometry() %>% 
+  group_by(LDcompare) %>% 
+  summarise(., count=n())
+```
+
+There are 9 wards that having violent crime rate above London's average but no S&S, what are their borough name?
+
+```{r warning=FALSE, message=FALSE}
+no_ss %>% 
+  filter(LDcompare == "above London average") %>% 
+  st_drop_geometry() %>% 
+  left_join(., 
+            wardMap %>% dplyr::select(GSS_CODE, BOROUGH),
+            by = c("ward_code" = "GSS_CODE")) %>% 
+  group_by(BOROUGH, ward_name) %>% 
+  summarise(., count=n())
 ```
 
 Create a subset data of all rates for later parts.
@@ -1559,7 +1592,19 @@ datalist
 
 Calculate local Moran's I for several important variables for inspecting racial discrimination of search rate and hit rate.
 
-```{r eval=FALSE, include=FALSE}
+```{r}
+moranI_total_search <- all_rates %>%
+  pull(total_search_rate) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_total_hit <- all_rates %>%
+  pull(total_hit_rate) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
 moranI_black_search <- all_rates %>%
   pull(black_search_rate) %>%
   as.vector()%>%
@@ -1601,6 +1646,8 @@ copy the Moran's I score and the z-score standard deviation back to all_rates da
 
 ```{r}
 all_rates <- all_rates %>% 
+  mutate(total_search_Iz = as.numeric(moranI_total_search$Z.Ii)) %>% 
+  mutate(total_hit_Iz = as.numeric(moranI_total_hit$Z.Ii)) %>% 
   mutate(black_search_Iz = as.numeric(moranI_black_search$Z.Ii)) %>% 
   mutate(white_search_Iz = as.numeric(moranI_white_search$Z.Ii)) %>% 
   mutate(asian_search_Iz = as.numeric(moranI_asian_search$Z.Ii)) %>% 
@@ -1939,109 +1986,105 @@ tm
 colnames(all_data)
 ```
 
-Check variable's distribution
-
-1.  total search rate
-
-```{r}
-summary(all_data$total_search_rate)
-
-ggplot(all_data, aes(x=total_search_rate)) + 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 0.1) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-```
-
-2.  total hit rate
-
-```{r}
-summary(all_data$total_hit_rate)
-
-ggplot(all_data, aes(x=total_hit_rate)) + 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 5) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-```
-
-3.  total violent crime rate
-
-```{r}
-summary(all_data$total_vio_rate)
-
-ggplot(all_data, aes(x=total_vio_rate)) + 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 1) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-```
-
-4.  total search counts
-
-```{r}
-summary(all_data$total_ss60)
-
-ggplot(all_data, aes(x=total_ss60)) + 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 10) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-```
-
-5.  total arrest counts
-
-```{r}
-summary(all_data$total_arrest)
-
-ggplot(all_data, aes(x=total_arrest)) + 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 1) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-```
-
-6.  total violent crime counts
-
-```{r}
-summary(all_data$total_violent_crime)
-
-ggplot(all_data, aes(x=total_violent_crime)) + 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 50) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-```
-
 #### arrest count & search count
+
+Assumption 1: there is a linear relationship between my variables
 
 ```{r message=FALSE, warning=FALSE}
 library(broom)
+library(ggpubr)
 all_data[is.na(all_data)] <- 0
 
-q <- qplot(x = total_ss60, 
-           y = total_arrest,
-           data = all_data)
+# transformation
+symbox(~total_arrest, 
+       all_data, 
+       na.rm=T,
+       powers=seq(-3,3,by=.5))
 
-#plot with a regression line - note, I've added some jitter here as the x-scale is rounded
+ggplot(all_data, aes(x=log(total_arrest)))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.5) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+symbox(~total_ss60, 
+       all_data, 
+       na.rm=T,
+       powers=seq(-3,3,by=.5))
+
+ggplot(all_data, aes(x=log(total_ss60)))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.5) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+# scatter plot
+q <- qplot(x = log(total_ss60), 
+           y = log(total_arrest),
+           data = all_data)
 q + stat_smooth(method="lm", se=FALSE, size=1) + 
   geom_jitter()
 
-model1 <- all_data %>%
-  lm(total_arrest ~ total_ss60, data=.)
+```
+
+Assumption 2: the residuals in my model should be normally distributed
+
+```{r message=FALSE, warning=FALSE}
+# select data for regression model
+regression_data <- all_data %>% 
+  dplyr::select(ward_code, total_arrest, total_ss60) %>% 
+  mutate(total_arrest_log = log(total_arrest),
+         total_ss60_log = log(total_ss60)) %>% 
+  st_drop_geometry()
+
+# convert Inf to 1e-9 and remove rows containing NA
+regression_data[sapply(regression_data, is.infinite)] <- 1e-9
+regression_data <- regression_data[complete.cases(regression_data), ]
+
+# compute linear regression model
+model1 <- regression_data %>%
+  lm(total_arrest_log ~ total_ss60_log, data=.)
 
 # summary stats
 tidy(model1)
 glance(model1)
+
+# check residuals
+regression_data <- model1 %>%
+  augment(., regression_data)
+
+#plot residuals
+regression_data%>%
+  dplyr::select(.resid)%>%
+  pull()%>%
+  qplot()+ 
+  geom_histogram()
 ```
 
-#### hit rate & search rate 
+Assumption 3: errors/residuals in the model exhibit constant / homogeneous variance
+
+```{r}
+par(mfrow=c(2,2))    #plot to 2 by 2 array
+plot(model1)
+```
+
+Assumption 4: independent of errors, look for spatial autocorrelation
+
+```{r}
+# plot the residuals
+regression_data <- left_join(regression_data, 
+                             wardMap %>% dplyr::select(GSS_CODE, geometry),
+                             by = c("ward_code" = "GSS_CODE")) %>% 
+  st_as_sf(.)
+
+tm_shape(regression_data) +
+  tm_polygons(".resid",
+              palette = "RdYlBu") 
+```
+
+#### hit rate & search rate
 
 Q: scatter plot shows non-linear patterns, should I take log-transformation to my variables or fit to a non-linear model?
 
@@ -2064,8 +2107,17 @@ glance(model1)
 
 **Tukey's ladder of transformations**
 
-```{r}
-ggplot(all_data, aes(x=log(total_search_rate)) )+ 
+```{r message=FALSE, warning=FALSE}
+#install.packages("car")
+library(car)
+
+# find a proper transformation for total search rate 
+symbox(~total_search_rate, 
+       all_data, 
+       na.rm=T,
+       powers=seq(-3,3,by=.5))
+
+ggplot(all_data, aes(x=(total_search_rate)^-0.5))+ 
   geom_histogram(aes(y = ..density..),
                  binwidth = 0.5) + 
   geom_density(colour="red", 
@@ -2073,27 +2125,24 @@ ggplot(all_data, aes(x=log(total_search_rate)) )+
                adjust=1)
 ```
 
-```{r}
-#install.packages("car")
-library(car)
+```{r message=FALSE, warning=FALSE}
+# find a proper transformation for total hit rate 
 symbox(~total_hit_rate, 
        all_data, 
        na.rm=T,
        powers=seq(-3,3,by=.5))
-```
 
-```{r}
-ggplot(all_data, aes(x=(total_search_rate)^-1))+ 
+ggplot(all_data, aes(x=(total_hit_rate)^-0.5))+ 
   geom_histogram(aes(y = ..density..),
-                 binwidth = 5) + 
+                 binwidth = 0.1) + 
   geom_density(colour="red", 
                size=1, 
                adjust=1)
 ```
 
 ```{r message=FALSE, warning=FALSE}
-q <- qplot(x = (total_search_rate)^-1, 
-           y = (total_hit_rate)^-1,
+q <- qplot(x = (total_search_rate)^-0.5, 
+           y = (total_hit_rate)^-0.5,
            data = all_data)
 
 #plot with a regression line - note, I've added some jitter here as the x-scale is rounded
