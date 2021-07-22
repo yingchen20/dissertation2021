@@ -2005,12 +2005,21 @@ library(broom)
 library(ggpubr)
 library(car)
 # first calculate the number of ss/arrest divided by population for 1000 population
-all_data <- all_data %>% 
+regression_data <- all_data %>% 
   mutate(total_search_rate1000 = total_ss60/all_population *1000,
-         total_arrest_rate1000 = total_arrest/all_population *1000) %>% 
-  mutate_if(is.numeric, ~round(., 2))
+         total_arrest_rate1000 = total_arrest/all_population *1000，
+         total_search_rate1000log = log(total_search_rate1000),
+         total_arrest_rate1000log = log(total_arrest_rate1000)) %>% 
+  mutate_if(is.numeric, ~round(., 2)) %>% 
+  st_drop_geometry() %>% 
+  left_join(.,wardMap %>% dplyr::select(GSS_CODE,geometry),
+            by = c("ward_code" = "GSS_CODE"))
 
-# transformation
+# convert Inf to 1e-9 and remove rows containing NA
+regression_data[sapply(regression_data, is.infinite)] <- 1e-9
+regression_data <- regression_data[complete.cases(regression_data), ]
+
+# check data histogram 
 symbox(~total_search_rate1000, 
        all_data, 
        na.rm=T,
@@ -2037,8 +2046,8 @@ ggplot(all_data, aes(x=log(total_arrest_rate1000)))+
 
 # scatter plot
 qplot(x = log(total_search_rate1000), 
-           y = log(total_arrest_rate1000),
-           data = all_data) +
+      y = log(total_arrest_rate1000),
+      data = all_data) +
 stat_smooth(method="lm", se=FALSE, size=1) + 
   geom_jitter()
 
@@ -2049,17 +2058,6 @@ Assumption 2: the residuals in my model should be normally distributed
 -- yes?
 
 ```{r message=FALSE, warning=FALSE}
-# select data for regression model
-regression_data <- all_data %>% 
-  dplyr::select(ward_code, total_search_rate1000, total_arrest_rate1000) %>% 
-  mutate(total_search_rate1000log = log(total_search_rate1000),
-         total_arrest_rate1000log = log(total_arrest_rate1000)) %>% 
-  st_drop_geometry()
-
-# convert Inf to 1e-9 and remove rows containing NA
-regression_data[sapply(regression_data, is.infinite)] <- 1e-9
-regression_data <- regression_data[complete.cases(regression_data), ]
-
 # compute linear regression model
 model1 <- regression_data %>%
   lm(total_arrest_rate1000log ~ total_search_rate1000log, data=.)
@@ -2102,7 +2100,7 @@ durbinWatsonTest(model1) %>%
 regression_data[is.na(regression_data)] <- 0
 
 # calculate centroids 
-coordsM<- regression_data%>%
+coordsM<- regression_data %>% 
   st_centroid()%>%
   st_geometry()
 plot(coordsM,axes=TRUE)
@@ -2172,7 +2170,7 @@ var(all_data$total_arrest)
 
 The variance is slightly larger than the mean so should not be a big problem.
 
-#### Standard Poisson model 
+#### Standard Poisson model
 
 While a Poisson regression model is a good first choice because the responses are counts per period of time (from April 2019 to April 2021), it is important to note that the counts are not directly comparable because they come from different size wards. This issue sometimes is referred to as the need to account for *sampling effort*; in other words, we expect wards with more population to have more reports of arrests since there are more people who could be affected. We can take the differences in ward population into account by including an **offset** in our model.
 
@@ -2266,7 +2264,7 @@ The model residual deviance can be used to assess the degree to which the predic
 
 There are several reasons why **lack-of-fit** may be observed. (1) We may be missing important covariates or interactions; a more comprehensive data set may be needed. (2) There may be extreme observations that may cause the deviance to be larger than expected; indeed, there are very few places with very high S&S counts and the majority of places with very little S&S. (3) Lastly, there may be a problem with the Poisson model. In particular, the Poisson model has only a single parameter, λ, for each combination of the levels of the predictors which must describe both the mean and the variance. This limitation can become manifest when the variance appears to be larger than the corresponding means. In that case, the response is more variable than the Poisson model would imply, and the response is considered to be **overdispersed**.
 
-#### Negative binomial regression 
+#### Negative binomial regression
 
 ```{r}
 library(MASS)
