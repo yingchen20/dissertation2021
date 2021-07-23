@@ -5,3 +5,6 @@ Main methods:
 * ST-DBSCAN
 * Spatial Autocorrelation
 * Agglomerative Hierarchical Clustering 
+* Simply linear regression model 
+* Poisson regression model (briefly) 
+* Geographically weighted regression Models
