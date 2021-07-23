@@ -1974,77 +1974,65 @@ tm
 
 ### Research Hypothesis
 
-1.  Is there a relationship between S&S (s60) search rate and arrest rate? -- Poisson regression
+1.  Is there a relationship between S&S (s60) search rate and arrest rate?
 
     -   Is increasing S&S (s60) potentially lead to more/less arrests across wards (i.e. are arrests distributed randomly or there's some pattern) ?
 
     -   What about for different minority groups, will the outcome be different?
 
-2.  Is there a relationship between S&S (s60) search rate and violent crime rate?
+2.  What are the factors that might lead to variation in search rate across the city?
 
-    -   Is increasing S&S (s60) potentially lead to more/less violent crime across wards?
-
-3.  What are the factors that might lead to variation in search rate across the city? -- Linear regression
+    -   Is there a relationship between search rate and violent crime rate? How about factors such as lone parent unemployment rate, mean income rate, economic inactivity rate?
 
 ```{r}
 colnames(all_data)
 ```
 
-### Linear regression
+### total search vs. total arrest
+
+#### Linear regression
 
 Assumption 1: there is a linear relationship between my variables --
 
--- yes, there are some linear patterns after log transformation but the histogram is still skewed.
+-- yes, the linear pattern is very obvious.
 
 ```{r message=FALSE, warning=FALSE}
 library(broom)
 library(ggpubr)
 library(car)
-# first calculate the number of ss/arrest divided by population for 1000 population
+# to make results easy to interpret, I divide search counts and arrest counts by population and then multiply by 1000, meaning the predicted number of arrest per 1,000 population in London wards, rather than per population.
+
 regression_data <- all_data %>% 
-  mutate(total_search_1000 = total_ss60/all_population *1000,
-         total_arrest_1000 = total_arrest/all_population *1000,
-         total_search_1000log = log(total_search_1000),
-         total_arrest_1000log = log(total_arrest_1000), 
+  mutate(total_search_1000 = total_ss60/all_population*1000,
+         total_arrest_1000 = total_arrest/all_population*1000,
+         black_search_1000 = ss60_black/black_pop*1000,
+         black_arrest_1000 = arrest_black/black_pop*1000,
+         white_search_1000 = ss60_white/white_pop*1000,
+         white_arrest_1000 = arrest_white/white_pop*1000,
+         asian_search_1000 = ss60_asian/asian_pop*1000,
+         asian_arrest_1000 = arrest_asian/asian_pop*1000,
          population1000 = all_population/1000) %>% 
   mutate_if(is.numeric, ~round(., 2)) %>% 
   st_drop_geometry() 
 
-# convert Inf to 1e-9 
-regression_data[sapply(regression_data, is.infinite)] <- 1e-9
-
-# filter out ward that both logged columns == le-9 (meaning they don't have search or arrest at all)
-#regression_data <-regression_data %>% 
- # filter(total_search_1000log != 1e-9 | total_arrest_1000log != 1e-9)
-
-# check data histogram 
-symbox(~total_search_1000, 
-       regression_data, 
-       na.rm=T,
-       powers=seq(-3,3,by=.5))
-
-ggplot(regression_data, aes(x=log(total_search_1000)))+ 
+# check variables' histogram 
+ggplot(regression_data, aes(x=total_search_1000))+ 
   geom_histogram(aes(y = ..density..),
                  binwidth = 0.5) + 
   geom_density(colour="red", 
                size=1, 
                adjust=1)
 
-symbox(~total_arrest_1000, 
-       regression_data, 
-       na.rm=T,
-       powers=seq(-3,3,by=.5))
-
-ggplot(regression_data, aes(x=log(total_arrest_1000)))+ 
+ggplot(regression_data, aes(x=total_arrest_1000))+ 
   geom_histogram(aes(y = ..density..),
-                 binwidth = 0.5) + 
+                 binwidth = 0.1) + 
   geom_density(colour="red", 
                size=1, 
                adjust=1)
 
 # scatter plot
-qplot(x = log(total_search_1000), 
-      y = log(total_arrest_1000),
+qplot(x = total_search_1000, 
+      y = total_arrest_1000,
       data = regression_data) +
 stat_smooth(method="lm", se=FALSE, size=1) + 
   geom_jitter()
@@ -2053,18 +2041,19 @@ stat_smooth(method="lm", se=FALSE, size=1) +
 
 Assumption 2: the residuals in my model should be normally distributed
 
--- yes?
+-- yes!
 
 ```{r message=FALSE, warning=FALSE}
 # compute linear regression model
 model1 <- regression_data %>%
-  lm(total_arrest_1000log ~ total_search_1000log, data=.)
+  lm(total_arrest_1000 ~ total_search_1000, data=.)
 
 # summary stats
-tidy(model1)
-glance(model1)
+# tidy(model1)
+# glance(model1)
+summary(model1)
 
-# check residuals
+# append residuals data to regression_data 
 regression_data <- model1 %>%
   augment(., regression_data)
 
@@ -2074,11 +2063,16 @@ regression_data%>%
   pull()%>%
   qplot()+ 
   geom_histogram()
+
 ```
+
+The predicted function is:
+
+y = 0.0079 + 0.0424 ss60, meaning for 1 increase in stop and search for every thousand of population, the model suggests the arrest count is expected to increase 0.0424. In order words, on average, for every 1k stop and search in London, we are expected to have 42 arrests.
 
 Assumption 3: errors/residuals in the model exhibit constant / homogeneous variance
 
--- clearly there's some patterns in the residuals vs fitted plot, failing to fit to a linear regression model.
+-- The first and third plot shows some clustering pattern and the red line is not straight suggesting some hetroscedasticity, perhaps because there are many wards with zero arrest rate or search rate.
 
 ```{r}
 par(mfrow=c(2,2))    #plot to 2 by 2 array
@@ -2087,13 +2081,7 @@ plot(model1)
 
 Assumption 4: independent of errors, look for spatial autocorrelation
 
-Durbin-Watson test tests whether residuals are correlated and produces a summary statistic that ranges between 0 and 4, with 2 signifiying no autocorrelation. A value greater than 2 suggesting negative autocorrelation and and value of less than 2 indicating postitve autocorrelation.
-
-```{r}
-# Durbin-Watson test: 
-durbinWatsonTest(model1) %>% 
-  tidy(.)
-
+```{r message=F, warning=F}
 # transform regression data to sf object
 regression_data <- regression_data %>% 
   left_join(.,wardMap %>% dplyr::select(GSS_CODE,geometry),
@@ -2105,12 +2093,10 @@ regression_data <- data.frame(regression_data) %>%
 coordsM<- regression_data %>% 
   st_centroid()%>%
   st_geometry()
-plot(coordsM,axes=TRUE)
 
 # create a neighborhoods list
 Lward_nb <- regression_data %>%
   poly2nb(., queen=T, snap=0.00001)  
-plot(Lward_nb, st_geometry(coordsM), col="red")
 
 # create a spatial weight object
 Lward_lw <- Lward_nb %>%
@@ -2123,9 +2109,9 @@ regression_data %>%
 
 ```
 
-Moran's I statistic is 0.1, showing a very week spatial autocorrelation in my residuals, no need to worry about. However, model's residuals do not have homogeneous residuals variance and show a curvilinear pattern so I turn to Poisson regression.
+Moran's I statistic is 0.04, showing no spatial autocorrelation in my residuals. Linear regression is suitable for my rate data is okay but what if using count data in a Poisson regression model...
 
-### Poisson regression
+#### Poisson regression
 
 Assumptions (<https://bookdown.org/roback/bookdown-BeyondMLR/ch-poissonreg.html>)
 
@@ -2172,8 +2158,6 @@ var(regression_data$total_arrest)
 
 The variance is slightly larger than the mean so should not be a big problem.
 
-#### Standard Poisson model
-
 While a Poisson regression model is a good first choice because the responses are counts per period of time (from April 2019 to April 2021), it is important to note that the counts are not directly comparable because they come from different size wards. This issue sometimes is referred to as the need to account for *sampling effort*; in other words, we expect wards with more population to have more reports of arrests since there are more people who could be affected. We can take the differences in ward population into account by including an **offset** in our model.
 
 ```{r}
@@ -2185,44 +2169,32 @@ model2 <- glm(total_arrest ~ total_ss60,
 summary(model2)
 ```
 
-"Cameron and Trivedi (2009) recommended using robust standard errors for the parameter estimates to control for mild violation of the distribution assumption that the variance equals the mean. We use R package **`sandwich`** below to obtain the robust standard errors and calculated the p-values accordingly."
+The standard Poisson regression model gives us,
 
-From: <https://stats.idre.ucla.edu/r/dae/poisson-regression/>
+log(λ) = -2.89 + 0.008 ss60,
+
+by exponentiating the coefficient of ss60 we obtain the multiplicative factor by which the mean count changes. In this case, the mean number of S&S (s60) arrests changes by a factor of e\^0.008=1.01 or increases by 0.01 % (since 1.01-1=0.01) with each additional stop and search for violating section 60. 1.01 is referred to as a **rate ratio** or **relative risk**.
+
+We can use standard error to construct a confidence interval for β1. A 95% CI provides a range of plausible values for the ss60 coefficient and can be constructed by using "sandwich" library based on work done by Cameron and Trivedi (2009). <https://stats.idre.ucla.edu/r/dae/poisson-regression/>
 
 ```{r}
 library(sandwich)
-cov.m1 <- vcovHC(model2, type="HC0")  
-std.err <- sqrt(diag(cov.m1))
+cov.mdl2 <- vcovHC(model2, type="HC0")
+std.err <- sqrt(diag(cov.mdl2))
 r.est <- cbind(Estimate= coef(model2), "Robust SE" = std.err,
 "Pr(>|z|)" = 2 * pnorm(abs(coef(model2)/std.err), lower.tail=FALSE),
 LL = coef(model2) - 1.96 * std.err,
 UL = coef(model2) + 1.96 * std.err)
-
 r.est
-```
-
-The standard Poisson regression model gives us,
-
-log(λ) = -9.8 + 0.008 ss60,
-
-by exponentiating the coefficient of ss60 we obtain the multiplicative factor by which the mean count changes. In this case, the mean number of S&S (s60) arrests changes by a factor of e\^0.008=1.01 or increases by 0.01 % (since 1.01-1=0.01) with each additional stop and search for violating section 60. 1.01 is referred to as a **rate ratio** or **relative risk**.
-
-We can use standard error to construct a confidence interval for β1. A 95% CI provides a range of plausible values for the ss60 coefficient and can be constructed:
-
-(^β1−Z∗⋅SE(^β1),^β1+Z∗⋅SE(^β1))
-
-```{r}
-0.008-1.96*0.0007728539
-0.008+1.96*0.0007728539
 ```
 
 Exponentiating the endpoints yields a confidence interval for the relative risk; i.e., the percent change in arrest counts for each additional percent increase in ss60.
 
-( e^0.00649^ , e^0.00951^ ) = (1.00651 , 1.00956) suggesting that we are 95% confident that the mean number in the arrest increase between 0.65% and 0.96% for each additional stop and search for section 60. The interval does not include 1 so we can conclude stop and search is significantly associated with arrests.
+( e^0.006513633^ , e^0.009542442^ ) = (1.00653 , 1.00959) suggesting that we are 95% confident that the mean number in the arrest increase between 0.65% and 0.96% for each additional stop and search for section 60. The interval does not include 1 so we can conclude stop and search is significantly associated with arrests.
 
 Deviance is a way in which to measure how the observed data deviates from the model predictions, similar to sum of squared errors in linear regression. Because we want models that minimize deviance, we calculate the drop-in-deviance when adding age to the model with no covariates (the null model).
 
-The deviances for the null model and the model with age can be found in the model output. A residual deviance for the model with age is reported as 1143.1 with 623 df. The output also includes the deviance and degrees of freedom for the null model (1879.7 with 624 df). The drop-in-deviance is 736.6 (1879.7-1143.1) with a difference of only 1 df, so that the addition of one extra term (ss60) reduced unexplained variability by 736.6.
+The deviances for the null model and the model with age can be found in the model output. A residual deviance for the model with ss60 is reported as 1143.1 with 623 df. The output also includes the deviance and degrees of freedom for the null model (1879.7 with 624 df). The drop-in-deviance is 736.6 (1879.7-1143.1) with a difference of only 1 df, so that the addition of one extra term (ss60) reduced unexplained variability by 736.6.
 
 If the null model were true, we would expect the drop-in-deviance to follow a χ2 distribution with 1 df. Therefore, the p-value for comparing the null model to the model with ss60 is found by determining the probability that the value for a χ2 random variable with one degree of freedom exceeds 736.6, which is essentially 0. Once again, we can conclude that we have statistically significant evidence (χ2 (df=1)=736.6, p\<.001) that average count of arrest increases as stop and search increases.
 
@@ -2233,13 +2205,7 @@ model0 <- glm(total_arrest ~ 1, family = poisson, offset = log(population1000),
 anova(model0, model2, test = "Chisq")
 ```
 
-More formally, we are testing:
-
-Null (reduced) Model: log⁡(λ)=β0 or β1=0
-
-Larger (full) Model: log⁡(λ)=β0+β1age or β1≠0
-
-In order to use the drop-in-deviance test, the models being compared must be **nested**; e.g., all the terms in the smaller model must appear in the larger model. Here the smaller model is the null model with the single term β0 and the larger model has β0 and β1, so the two models are indeed nested. For nested models, we can compare the models' residual deviances to determine whether the larger model provides a significant improvement.
+Based on the above, we can see that the p-value \< 0.05, so we reject the null hypothesis that the regression coefficients are all zero. Hence our model is statistically significant.
 
 **Drop-in-deviance test to compare models**
 
@@ -2254,13 +2220,21 @@ rsid <- residuals(model2)
 d <- deviance(model2)
 par(mfrow=c(2,2))
 plot(regression_data$total_ss60, rsid)
-boxplot(rsid~regression_data,xlab="S&S",ylab = "Std residuals",data = regression_data)
+boxplot(rsid~total_ss60,xlab="S&S",ylab = "Std residuals",data = regression_data)
 qqnorm(rsid, ylab="Std residuals")
 qqline(rsid,col="blue",lwd=2)
 hist(rsid)
 ```
 
+We saw residuals are not normally distributed, probably because we have many observations that have certain amount of searches but no arrests, leading to a bad model prediction.
+
 **Goodness of fit:**
+
+In order to assess goodness of fit, we will look at the deviance residuals, and apply a χdf2 test based on our n-p-1 degrees of freedom. In this case, our p-value is zero, and so we fail to reject the null hypothesis that the model is not a good fit.
+
+```{r}
+c(deviance(model2), 1-pchisq(model2$deviance, model2$df.residual))  # GOF test
+```
 
 The model residual deviance can be used to assess the degree to which the predicted values differ from the observed. When a model is true, we can expect the residual deviance to be distributed as a χ2 random variable with degrees of freedom equal to the model's residual degrees of freedom. Our model has a residual deviance of 1143.1 with 623 df. The probability of observing a deviance this large if the model fits is esentially 0, saying that there is significant evidence of lack-of-fit.
 
@@ -2268,26 +2242,267 @@ There are several reasons why **lack-of-fit** may be observed. (1) We may be mis
 
 #### Negative binomial regression
 
-```{r}
+```{r message=F, warning=F}
 library(MASS)
 modelinb <- glm.nb(total_arrest ~ total_ss60,
-                   data = re)
+                   offset(log(population1000)),
+                   data = regression_data)
 summary(modelinb)
 ```
 
 ```{r}
-pchisq(modelinb$deviance, modelinb$df.residual)  # GOF test
+model0 <- glm.nb(total_arrest ~ 1, data = regression_data)
+anova(model0, modelinb, test = "Chisq")
 ```
 
-Check model residuals
+P-value =1 meaning the model does not predict values well, so should stick with Poisson regression.
 
 ```{r}
-rsid <- residuals(model2)
-d <- deviance(model2)
-par(mfrow=c(2,2))
-plot(regression_data$total_ss60, rsid)
-boxplot(rsid~total_ss60,xlab="S&S",ylab = "Std residuals",data = regression_data)
-qqnorm(rsid, ylab="Std residuals")
-qqline(rsid,col="blue",lwd=2)
-hist(rsid)
+c(deviance(modelinb), 1-pchisq(modelinb$deviance, modelinb$df.residual)) 
+```
+
+Plot the predicted equation from Poisson regression and linear regression back to our scatter plot
+
+log(y) = -2.89 + 0.008 ss60 (Poisson)
+
+y = 0.0079 + 0.0424 ss60 (Linear)
+
+```{r}
+Pfun <- function(xvar) {
+ (exp(-2.89) + exp(0.008*xvar))
+}
+
+Lfun <- function(xvar) {
+ (0.0079 + 0.0424*xvar)
+}
+
+# plot
+ggplot(regression_data,
+       aes(y=total_arrest,x=total_ss60)) +
+  geom_point() +
+  stat_function(fun = Pfun, geom = "line", col="blue") +
+  stat_function(fun = Lfun, geom = "line", col="red") +
+  geom_label(x=Inf, y = Inf, 
+           label = "y = 0.0079 + 0.0424*x \n R-sqr = 0.798", vjust=3, hjust=1, col="red") +
+  geom_label(x=Inf, y = Inf, 
+           label = "log(y) = -2.89 + 0.008*x \n Residual Deviance = 1143.1", vjust=1, hjust=1, col="blue")
+```
+
+### Black search vs. black arrest
+
+```{r warning=FALSE, message=FALSE}
+###### assumption1 #####
+ggplot(regression_data, aes(x=black_search_1000))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 10) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+ggplot(regression_data, aes(x=black_arrest_1000))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+# scatter plot
+qplot(x = black_search_1000, 
+      y = black_arrest_1000,
+      data = regression_data) +
+stat_smooth(method="lm", se=FALSE, size=1) + 
+  geom_jitter()
+
+###### assumption2 #####
+# compute linear regression model
+model_b <- regression_data %>% 
+  lm(black_arrest_1000 ~ black_search_1000, data=.)
+
+# summary stats
+summary(model_b)
+
+# append residuals data to regression_data 
+regression_data <- model_b %>%
+  augment(., regression_data)
+
+#plot residuals
+regression_data%>%
+  dplyr::select(.resid)%>%
+  pull()%>%
+  qplot()+ 
+  geom_histogram()
+
+###### assumption3 #####
+par(mfrow=c(2,2))    #plot to 2 by 2 array
+plot(model_b)
+
+
+###### assumption4 #####
+regression_data %>% 
+    pull(.resid) %>% 
+    as.vector() %>% 
+    moran.test(., Lward_lw, zero.policy = TRUE)
+```
+
+```{r}
+library(ggplot2)
+Lfun <- function(xvar) {
+ (0.0689 + 0.0395*xvar)
+}
+
+# plot
+ggplot(regression_data,
+       aes(y=black_arrest_1000,x=black_search_1000)) +
+  geom_point() +
+  stat_function(fun = Lfun, geom = "line", col="red") +
+  geom_label(x=Inf, y = Inf, 
+           label = "y = 0.0689 + 0.0395*x \n R-sqr = 0.715", vjust=1, hjust=1)
+```
+
+### White search vs white arrest
+
+```{r warning=FALSE, message=FALSE}
+###### assumption1 #####
+ggplot(regression_data, aes(x=white_search_1000))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+ggplot(regression_data, aes(x=white_arrest_1000))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+# scatter plot
+qplot(x = white_search_1000, 
+      y = white_arrest_1000,
+      data = regression_data) +
+stat_smooth(method="lm", se=FALSE, size=1) + 
+  geom_jitter()
+
+###### assumption2 #####
+# compute linear regression model
+model_b <- regression_data %>% 
+  lm(white_arrest_1000 ~ white_search_1000, data=.)
+
+# summary stats
+summary(model_b)
+
+# append residuals data to regression_data 
+regression_data <- model_b %>%
+  augment(., regression_data)
+
+#plot residuals
+regression_data%>%
+  dplyr::select(.resid)%>%
+  pull()%>%
+  qplot()+ 
+  geom_histogram()
+
+###### assumption3 #####
+par(mfrow=c(2,2))    #plot to 2 by 2 array
+plot(model_b)
+
+
+###### assumption4 #####
+regression_data %>% 
+    pull(.resid) %>% 
+    as.vector() %>% 
+    moran.test(., Lward_lw, zero.policy = TRUE)
+```
+
+```{r}
+library(ggplot2)
+Lfun <- function(xvar) {
+ (0.00594 + 0.0433*xvar)
+}
+
+# plot
+ggplot(regression_data,
+       aes(y=white_arrest_1000,x=white_search_1000)) +
+  geom_point() +
+  stat_function(fun = Lfun, geom = "line", col="red") +
+  geom_label(x=Inf, y = Inf, 
+           label = "y = 0.00594 + 0.0433*x \n R-sqr = 0.4917", vjust=1, hjust=1)
+```
+
+### Asian search vs. Asian arrest
+
+```{r warning=FALSE, message=FALSE}
+###### assumption1 #####
+ggplot(regression_data, aes(x=asian_search_1000))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+ggplot(regression_data, aes(x=asian_arrest_1000))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+# scatter plot
+qplot(x = asian_search_1000, 
+      y = asian_arrest_1000,
+      data = regression_data) +
+stat_smooth(method="lm", se=FALSE, size=1) + 
+  geom_jitter()
+
+###### assumption2 #####
+# compute linear regression model
+model_b <- regression_data %>% 
+  lm(asian_arrest_1000 ~ asian_search_1000, data=.)
+
+# summary stats
+summary(model_b)
+
+# append residuals data to regression_data 
+regression_data <- model_b %>%
+  augment(., regression_data)
+
+#plot residuals
+regression_data%>%
+  dplyr::select(.resid)%>%
+  pull()%>%
+  qplot()+ 
+  geom_histogram()
+
+###### assumption3 #####
+par(mfrow=c(2,2))    #plot to 2 by 2 array
+plot(model_b)
+
+
+###### assumption4 #####
+regression_data %>% 
+    pull(.resid) %>% 
+    as.vector() %>% 
+    moran.test(., Lward_lw, zero.policy = TRUE)
+```
+
+```{r}
+library(ggplot2)
+Lfun <- function(xvar) {
+ (-0.00199 + 0.0344*xvar)
+}
+
+# plot
+ggplot(regression_data,
+       aes(y=asian_arrest_1000,x=asian_search_1000)) +
+  geom_point() +
+  stat_function(fun = Lfun, geom = "line", col="red") +
+  geom_label(x=Inf, y = Inf, 
+           label = "y = -0.00199 + 0.0344*x \n R-sqr = 0.322", vjust=1, hjust=1)
+```
+
+### total seach vs. multiple factors 
+
+```{r}
+
 ```
