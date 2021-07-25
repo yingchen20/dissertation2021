@@ -996,8 +996,10 @@ Columns we need:
 > -   "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
 > -   "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
 > -   "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
+> -   "indices_of_deprivation_idaci_2010",
+> -   "indices_of_deprivation_idaopi_2010",
 >
-> *the above might be useful if to investigate spatial autocorrelation between S&S rate and income/economically inactive rate*
+> *the above might be useful in spatial autocorrelation and regression model*
 
 ```{r message=FALSE, warning=FALSE}
 cols <- c(
@@ -1009,7 +1011,9 @@ cols <- c(
 "diversity_ethnic_group_5_groups_2011_census_other",
 "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
 "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
-"qualifications_qualifications_and_students_2011_census_percent_no_qualifications")
+"qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
+"indices_of_deprivation_idaci_2010",
+"indices_of_deprivation_idaopi_2010")
 
 wardDataMerged <-
   left_join(wardMap %>% dplyr::select(NAME,GSS_CODE,geometry),
@@ -1024,14 +1028,16 @@ wardDataMerged <-
          unemployed_loneParent_rate = "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
          no_qualification_rate = "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
          ward_name = "NAME",
-         ward_code = "GSS_CODE") 
+         ward_code = "GSS_CODE",
+         idaci_index = "indices_of_deprivation_idaci_2010",
+         idaopi_index = "indices_of_deprivation_idaopi_2010") 
 
 # convert column types to numeric
 cols.num <- c("all_population",  "white_pop", "asian_pop",
               "black_pop", "otherEth_pop", "econ_inac_rate", 
-              "unemployed_loneParent_rate", "no_qualification_rate")
+              "unemployed_loneParent_rate", "no_qualification_rate", 
+              "idaci_index","idaopi_index")
 wardDataMerged[cols.num] <- sapply(wardDataMerged[cols.num],as.numeric)
-
 
 # calculate population percent
 wardDataMerged <- wardDataMerged %>% 
@@ -1355,14 +1361,14 @@ no_ss %>%
   kable()
 ```
 
+## Spatial autocorrelation
+
 Create a subset data of all rates for later parts.
 
 ```{r}
 all_rates <- all_data %>% 
-  dplyr::select(ends_with("rate") | ward_code) 
+  dplyr::select(ends_with("rate") | ward_code | idaci_index | idaopi_index) 
 ```
-
-## Spatial autocorrelation
 
 Create a neighborhoods list and spatial weight matrix.
 
@@ -1543,6 +1549,18 @@ moranI_white_pop <- all_rates %>%
   as.vector()%>%
   localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
+
+moranI_idaci <- all_rates %>% 
+  pull(idaci_index) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_idaopi <- all_rates %>% 
+  pull(idaopi_index) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
 ```
 
 copy the Moran's I score and the z-score standard deviation back to all_rates dataframe
@@ -1559,7 +1577,9 @@ all_rates <- all_rates %>%
   mutate(asian_hit_Iz = as.numeric(moranI_asian_hit$Z.Ii)) %>% 
   mutate(black_pop_Iz = as.numeric(moranI_black_pop$Z.Ii)) %>% 
   mutate(white_pop_Iz = as.numeric(moranI_white_pop$Z.Ii)) %>% 
-  mutate(asian_pop_Iz = as.numeric(moranI_asian_pop$Z.Ii))
+  mutate(asian_pop_Iz = as.numeric(moranI_asian_pop$Z.Ii)) %>% 
+  mutate(idaci_Iz = as.numeric(moranI_idaci$Z.Ii)) %>% 
+  mutate(idaopi_Iz = as.numeric(moranI_idaopi$Z.Ii))
 ```
 
 We'll set the breaks manually based on the rule that data points \>2.58 or \<-2.58 standard deviations away from the mean are significant at the 99% level (\<1% chance that autocorrelation not present); \>1.96 - \<2.58 or \<-1.96 to \>-2.58 standard deviations are significant at the 95% level (\<5% change that autocorrelation not present). \>1.65 = 90% etc.
@@ -1742,7 +1762,45 @@ t9 <- tm_shape(all_rates) +
             legend.position = c(.8,0))+
   tm_credits("(f)", position=c(0,0.8), size=1)
 
-t=tmap_arrange(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+t10 <- tm_shape(all_rates) + 
+  tm_polygons("idaci_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette= "viridis",
+        midpoint=NA,
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, idaci index", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(g)", position=c(0,0.8), size=1)
+
+t11 <- tm_shape(all_rates) + 
+  tm_polygons("idaopi_Iz",
+        style="fixed",
+        breaks=breaks1,
+        palette= "viridis",
+        midpoint=NA,
+        title="Local Moran's I") +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="Local Moran's I, idaopi index", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(h)", position=c(0,0.8), size=1)
+
+t=tmap_arrange(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
 
 t
 ```
@@ -1920,6 +1978,20 @@ tm7 <- tm_shape(all_rates) +
             legend.position = c(.8,0))+
   tm_credits("(g)", position=c(0,0.6), size=1)
 
+tm_shape(all_rates) + 
+  tm_fill("idaci_index", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="idaci index", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(h)", position=c(0,0.6), size=1)
+
 tm =tmap_arrange(tm2, tm3, tm4, tm5, tm6, tm7)
 
 tm
@@ -1953,8 +2025,8 @@ Assumption 1: there is a linear relationship between my variables --
 library(broom)
 library(ggpubr)
 library(car)
-# to make results easy to interpret, I divide population by 1000, meaning the number of arrest/search per 1,000 population in London wards, rather than per population.
 
+# to make results easy to interpret, I divide population by 1000, meaning the number of arrest/search per 1,000 population in London wards, rather than per population.
 regression_data <- all_data %>% 
   mutate(total_search_1000 = total_ss60/all_population*1000,
          total_arrest_1000 = total_arrest/all_population*1000,
@@ -1967,6 +2039,9 @@ regression_data <- all_data %>%
          population1000 = all_population/1000) %>% 
   mutate_if(is.numeric, ~round(., 2)) %>% 
   st_drop_geometry() 
+
+# convert NAs to zero
+regression_data[is.na(regression_data)] <- 0
 
 # check variables' histogram 
 ggplot(regression_data, aes(x=total_search_1000))+ 
@@ -2537,37 +2612,188 @@ ggplot(regression_data, aes(x=econ_inac_rate))+
                size=1, 
                adjust=1)
 
-ggplot(regression_data, aes(x=all_population))+ 
+ggplot(regression_data, aes(x=white_pop))+ 
   geom_histogram(aes(y = ..density..),
                  binwidth = 100) + 
   geom_density(colour="red", 
                size=1, 
                adjust=1)
-```
 
-\
+ggplot(regression_data, aes(x=log(black_pop)))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+ggplot(regression_data, aes(x=log(asian_pop)))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+ggplot(regression_data, aes(x=idaci_index))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+ggplot(regression_data, aes(x=idaopi_index))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 0.05) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+```
 
 Because violent crime rate and stop and search rate are left-skewed, I take log-transformation to them but search rate have 0 which cannot be logged so I need to convert inf to really small number
 
 ```{r}
-regression_data2 <- regression_data %>% 
+regression_data2 <- all_data %>% 
   dplyr::select(ward_code,
                 econ_inac_rate,
                 unemployed_lone_parent_rate,
                 no_qualification_rate,
                 total_vio_rate,
                 total_search_rate,
+                idaci_index,
+                idaopi_index,
+                white_pop,
+                black_pop,
+                asian_pop,
                 all_population) %>% 
   mutate(vio_log_rate = log(total_vio_rate),
          search_log_rate = log(total_search_rate))%>% 
-  mutate_if(is.numeric, ~round(., 2))
-
-# replace inf to very small number (1e-9)
-regression_data2[mapply(is.infinite, regression_data2)] <- 1e-9
+  mutate_if(is.numeric, ~round(., 2)) %>% 
+  st_drop_geometry() %>% 
+  na.omit(.)
 
 # build model 
-model_final <- lm(search_log_rate ~ vio_log_rate  + all_population + econ_inac_rate + 
-                    unemployed_lone_parent_rate + no_qualification_rate, 
+model_mlr <- lm(search_log_rate ~ vio_log_rate  +  econ_inac_rate + 
+                    unemployed_lone_parent_rate + no_qualification_rate + idaci_index +
+                    idaopi_index + white_pop + log(black_pop) + log(asian_pop), 
+                  data = regression_data2)
+summary(model_mlr)
+```
+
+VIF
+
+```{r}
+vif(model_mlr)
+```
+
+Remove idaci_index to avoid Multicolinearity
+
+```{r}
+# build model 
+model_final <- lm(search_log_rate ~ vio_log_rate + econ_inac_rate + 
+                    unemployed_lone_parent_rate + no_qualification_rate + idaopi_index +
+                    log(white_pop) + black_pop + log(asian_pop),
                   data = regression_data2)
 summary(model_final)
+```
+
+Check VIF again
+
+```{r}
+vif(model_final)
+```
+
+Check residual's distribution and variance
+
+```{r}
+# append residuals data to regression_data 
+regression_data2 <- model_final %>%
+  augment(., regression_data2)
+
+# plot residuals
+regression_data2 %>%
+  dplyr::select(.resid)%>%
+  pull()%>%
+  qplot()+ 
+  geom_histogram()
+
+# check Homoscedasticity
+par(mfrow=c(2,2))    
+plot(model_final)
+
+```
+
+Check spatial autocorrelation for the residuals
+
+```{r message=FALSE, warning=FALSE}
+# join geometry data to regression_data2
+regression_data2 <- regression_data2 %>% 
+  left_join(.,
+            wardMap %>% dplyr::select(GSS_CODE, geometry),
+            by = c("ward_code" = "GSS_CODE")) %>% 
+  st_as_sf()
+
+# create spatial weight matrix 
+coordsW <- regression_data2%>%
+  st_centroid()%>%
+  st_geometry()
+
+knn_wards <-coordsW %>%
+  knearneigh(., k=4)
+
+LWard_knn <- knn_wards %>%
+  knn2nb()
+
+plot(LWard_knn, st_geometry(coordsW), col="red")
+
+Lward.knn_4_weight <- LWard_knn %>%
+  nb2listw(., style="C")
+
+# run moran's I test on the residuals
+Nearest_neighbour <- regression_data2 %>%
+  st_drop_geometry()%>%
+  dplyr::select(.resid)%>%
+  pull()%>%
+  moran.test(., Lward.knn_4_weight)
+
+Nearest_neighbour
+```
+
+Moran's I index is 0.4, showing a moderate spatial autocorrelation on my multiple linear regression residuals. Check the quick plot
+
+```{r}
+tm_shape(regression_data2) +
+  tm_polygons(".resid", 
+              palette = "RdYlBu")
+```
+
+#### GWR
+
+##### KNN-spatially-lagged regression model
+
+```{r message=FALSE, warning=FALSE}
+#run a spatially-lagged regression model
+model_gwr <- lagsarlm(search_log_rate ~ vio_log_rate + econ_inac_rate + 
+                    unemployed_lone_parent_rate + no_qualification_rate + idaopi_index +
+                    log(white_pop) + black_pop + log(asian_pop),
+                  data = regression_data2,
+                  nb2listw(LWard_knn, style="C"), 
+                  method = "eigen")
+
+summary(model_gwr)
+```
+
+```{r message=FALSE, warning=FALSE}
+glance(model_gwr)
+```
+
+##### Spatial Error 
+
+```{r warning=FALSE}
+model_sem <- errorsarlm(search_log_rate ~ vio_log_rate + econ_inac_rate + 
+                    unemployed_lone_parent_rate + no_qualification_rate + idaopi_index +
+                    log(white_pop) + black_pop + log(asian_pop),
+                  data = regression_data2,
+                  nb2listw(LWard_knn, style="C"), 
+                  method = "eigen")
+
+summary(model_sem)
 ```
