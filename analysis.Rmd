@@ -55,10 +55,6 @@ msoaMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI"
   st_transform(., 27700)
 ```
 
-```{r}
-
-```
-
 The following function used to search files that follow a specific pattern is obtained from <https://github.com/sjaraha/clustering-spatiotemporal-data>.
 
 ```{r}
@@ -89,7 +85,7 @@ list_data_paths <- function(pattern, rec){
 
 Use the function above and search for all crime data (ended with metropolitan-street.csv) in my local folder.
 
-```{r echo=TRUE, message = FALSE}
+```{r message = FALSE, warning=FALSE}
 setwd("/Users/yingchen/Documents2/CASA/dissertation/dissertation2021/data/crime_data")
 crime_list <- list_data_paths("\\-metropolitan-street.csv$",FALSE) 
 
@@ -109,7 +105,7 @@ crime<- crime %>%
            crs = 4326) %>% 
   st_transform(., 27700) 
 
-crime_london <- crime[wardMap,]
+crime_london <- crime[msoaMap,]
 ```
 
 Create a table counting crime numbers for each type.
@@ -124,35 +120,17 @@ crime_london %>%
   kable(., caption = 'London crimes by types from April 2019 to April 2021')
 ```
 
-I am interested in comparing violent crimes with stop and searches under one particular legislation (section 60) because section 60 is specifically targeted for violent crimes.
-
-```{r}
-violence_london <- crime_london %>% 
-  filter(., crime_type=='Violence and sexual offences') 
-```
-
-What are the most common outcome for violent crimes in London?
+I want to count the number of crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names. (*later to break down into different years*)
 
 ```{r message=False, warning=False, results='asis'}
-violence_london %>% 
-  group_by(last_outcome_category) %>% 
-  summarise(., count=n(),) %>%
-  arrange(desc(count)) %>% 
-  st_drop_geometry() %>% 
-  kable(., caption = 'London violent crimes by outcomes from April 2019 to April 2021')
-```
+crime_london$boro_name = substr(crime_london$lsoa_name,1,nchar(crime_london$lsoa_name)-4)
 
-I want to count the number of violent crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names. (*later to break down into different years*)
-
-```{r message=False, warning=False, results='asis'}
-violence_london$boro_name = substr(violence_london$lsoa_name,1,nchar(violence_london$lsoa_name)-4)
-
-violence_london %>% 
+crime_london %>% 
   group_by(boro_name) %>% 
   summarise(., count=n(),) %>% 
   arrange(desc(count)) %>% 
   st_drop_geometry() %>% 
-  kable(., caption = 'London violent crimes by boroughs from April 2019 to April 2021')
+  kable(., caption = 'London crimes by boroughs from April 2019 to April 2021')
 ```
 
 ## Understand stop and search (S&S) data
@@ -193,18 +171,10 @@ ss_london %>%
   kable(., caption = 'London S&S by legislation and search objects from April 2019 to April 2021')
 ```
 
--   The Criminal Justice and Public Order 1994 (section 60) aims to reduce violence in London. From April 2014, the UK government implements the Best Use of Stop and Search Scheme (BUSSS) and it gives more police power to stop and search people without having reasonable grounds for suspicion if violence is anticipated by police. The main purpose of the scheme is to prevent violent crimes (such as knife crime) before it happens.
--   Therefore, comparing the police usage of section 60 in terms of their locations, ethnicity of the person being S&S, time of a day, season of a year, and actual violent crime locationns within MSOA, LSOA or ward can help understand whether S&S is an effective way of deterring violent crimes at local level.
-
-```{r}
-ss60_london <- ss_london %>% 
-  filter(legislation == "Criminal Justice and Public Order Act 1994 (section 60)") 
-```
-
-What are the most common ethnicity of people being S&S for potential violence? (*later to break down into different years*)
+What are the most common outcome of people being S&S?
 
 ```{r message=False, warning=False, results='asis'}
-ss60_london %>% 
+ss_london %>% 
   group_by(outcome) %>% 
   summarise(., count=n(),) %>%
   mutate(prop = count/sum(count) *100) %>% 
@@ -214,17 +184,21 @@ ss60_london %>%
   kable(.)
 ```
 
+What are the most common ethnicity of successful S&S?
+
 ```{r message=False, warning=False, results='asis'}
-ss60_london %>%  
+ss_london %>%  
   filter(outcome == "Arrest") %>% 
-  group_by(officer_defined_ethnicity) %>% 
+  group_by(legislation, officer_defined_ethnicity) %>% 
   summarise(., count=n()) %>%
   mutate(prop = count/sum(count) *100) %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
-  arrange(desc(prop)) %>% 
+  arrange(desc(legislation)) %>% 
   st_drop_geometry() %>% 
   kable(.)
 ```
+
+### Overall trend map
 
 ```{r}
 # ss60_london %>% 
@@ -247,19 +221,19 @@ Potential way to determine MinPts: The rule of thumb for setting minPts is to us
 Observations: 1. if setting the eps as Ripley's K test suggests, the number is small and resulting in some small clusters with very few points within. 2. if setting as kNNdistplot suggests, the "knee" is usually quite large and it will give us a large cluster + some small clusters + isolated noises.
 
 ```{r message=FALSE, warning=FALSE}
-window <- as.owin(wardMap)
+window <- as.owin(msoaMap)
 
-ss60_black <- ss60_london %>% 
+ss_black <- ss_london %>% 
   filter(officer_defined_ethnicity == "Black") 
 
-ss60_blackSP <- ss60_black %>%  
+ss_blackSP <- ss_black %>%  
   as(., 'Spatial') 
-
-ss60_blackPPP <- ppp(x=ss60_blackSP@coords[,1],
-                     y=ss60_blackSP@coords[,2],
+ 
+ss_blackPPP <- ppp(x=ss_blackSP@coords[,1],
+                     y=ss_blackSP@coords[,2],
                      window=window)
 
-ss60_blackPoints<- ss60_blackSP %>%
+ss_blackPoints<- ss_blackSP %>%
   geometry(.)%>%
   as.data.frame()
 ```
@@ -267,7 +241,7 @@ ss60_blackPoints<- ss60_blackSP %>%
 1.  Choose Ripley's K method to select suitable parameters:
 
 ```{r message=FALSE, warning=FALSE}
-ss60_blackPPP %>%
+ss_blackPPP %>%
   Kest(., correction="border") %>%
   plot()
   #abline(v = 450, col = "blue", lty = 2)
@@ -278,12 +252,12 @@ Plot:
 ```{r}
 library(factoextra)
 
-db_b <- ss60_blackPoints %>%
+db_b <- ss_blackPoints %>%
   fpc::dbscan(.,eps = 1000, MinPts = 50)
 
 theme_set(theme_minimal())
 
-fviz_cluster(db_b, ss60_blackPoints, 
+fviz_cluster(db_b, ss_blackPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -303,7 +277,7 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 2.  Choose KNN distance method to select suitable parameters:
 
 ```{r}
-ss60_blackPoints %>%
+ss_blackPoints %>%
   dbscan::kNNdistplot(.,k=30) %>% 
   title(main="50-nearst Neighbor Distance Plot \n (MinPts=10, knee=1000)") %>% 
   abline(h = 1000, col = "red", lty = 2)
@@ -312,12 +286,12 @@ ss60_blackPoints %>%
 plot:
 
 ```{r message=FALSE, warning=FALSE}
-db_b_KNN <- ss60_blackPoints %>%
+db_b_KNN <- ss_blackPoints %>%
   fpc::dbscan(.,eps = 2000, MinPts = 30)
 
 theme_set(theme_minimal())
 
-fviz_cluster(db_b_KNN, ss60_blackPoints, 
+fviz_cluster(db_b_KNN, ss_blackPoints, 
                            geom = "point",
                            stand = FALSE, labelsize = NA,
                            outlier.pointsize = .8,
@@ -337,17 +311,17 @@ theme(plot.title=element_text(size = 12, hjust = 0.5, face="bold"),
 ### White
 
 ```{r message=FALSE, warning=FALSE}
-ss60_white<- ss60_london %>% 
+ss_white<- ss_london %>% 
   filter(officer_defined_ethnicity == "White") 
 
-ss60_whiteSP <- ss60_white %>%  
+ss_whiteSP <- ss_white %>%  
   as(., 'Spatial') 
 
-ss60_whitePPP <- ppp(x=ss60_whiteSP@coords[,1],
-                     y=ss60_whiteSP@coords[,2],
+ss_whitePPP <- ppp(x=ss_whiteSP@coords[,1],
+                     y=ss_whiteSP@coords[,2],
                      window=window)
 
-ss60_whitePoints<- ss60_whiteSP %>%
+ss_whitePoints<- ss_whiteSP %>%
   geometry(.)%>%
   as.data.frame()
 ```
@@ -355,7 +329,7 @@ ss60_whitePoints<- ss60_whiteSP %>%
 1.  Ripley's K method:
 
 ```{r message=FALSE, warning=FALSE}
-ss60_whitePPP %>%
+ss_whitePPP %>%
   Kest(., correction="border") %>% 
   plot()
   #abline(v = 750, col = "blue", lty = 2)
@@ -961,153 +935,277 @@ leaflet(data = clusters) %>%
                lng = ~longitude)
 ```
 
-## Add demographic data
+## Borough Clustering
+
+Detailed tutorial found at <https://uc-r.github.io/hc_clustering>
+
+Aggregate data to boroughs
+
+```{r message=FALSE}
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering visualization
+
+ss_count_boro <- st_join(ss_london, boroMap) %>% 
+  group_by(GSS_CODE, NAME) %>% 
+  summarise(., total_ss_count=n(),) %>% 
+  st_drop_geometry() %>% 
+  na.omit()
+
+crime_count_boro <- st_join(crime_london, boroMap) %>% 
+  group_by(GSS_CODE, NAME) %>% 
+  summarise(., total_crime_count=n(),) %>%
+  st_drop_geometry() %>% 
+  na.omit()
+
+arrest_count_boro <- st_join(ss_london, boroMap) %>% 
+  filter(outcome=="Arrest") %>% 
+  group_by(GSS_CODE, NAME) %>% 
+  summarise(., total_arrest_count=n(),) %>% 
+  st_drop_geometry() %>% 
+  na.omit()
+
+# add population data at borough level
+pop_boro <- read_csv("https://data.london.gov.uk/download/london-borough-profiles/c1693b82-68b1-44ee-beb2-3decf17dc1f8/london-borough-profiles.csv", na = c("NA", "n/a")) %>% 
+  clean_names()
+
+# trim unuseful rows 
+pop_boro <- pop_boro[1:33,]
+
+# merge all df together 
+merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>% 
+  left_join(., crime_count_boro) %>% 
+  left_join(., pop_boro %>% dplyr::select(code, gla_population_estimate_2017),
+            by = c("GSS_CODE" = "code")) %>% 
+  rename(pop = "gla_population_estimate_2017") %>% 
+  mutate(ss_rate = total_ss_count/pop *100,
+         arrest_rate = total_arrest_count/pop *100,
+         crime_rate = total_crime_count/pop *100) %>% 
+  mutate_if(is.numeric, ~round(., 2))
+
+# select columns to clustering
+df <- data.frame(merged_boro) %>% 
+  dplyr::select(NAME, GSS_CODE, ss_rate, arrest_rate, crime_rate)
+
+# scale the ss_rate, arrest_rate and crime_rate
+df[c(3:5)] <- scale(df[c(3:5)])
+
+# set borough name as rownames
+rownames(df) <- df$NAME 
+
+# remove the original NAME column
+df <- df %>% 
+  dplyr::select(-NAME)
+```
+
+### Agglomerative clustering
+
+To determine which clustering method I choose use, agnes function can calculate the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure).
+
+```{r}
+# methods to assess
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+
+# function to compute coefficient
+ac <- function(x) {
+  agnes(df, method = x)$ac
+}
+
+map_dbl(m, ac)
+```
+
+Clearly, Ward method with highest coefficient helps identify the strongest clustering structures
+
+```{r warning=FALSE}
+# Dissimilarity matrix
+d <- dist(df, method = "euclidean")
+
+# Hierarchical clustering using Ward Linkage
+hc <- hclust(d, method = "ward.D2")
+
+# Plot the obtained dendrogram
+plot(hc, cex = 0.6, hang = -1)
+```
+
+To determine the optimal cluster number:
+
+1\. Elbow Method 2. Average Silhouette Method
+
+```{r warning=FALSE}
+# use Elbow Method first  
+library(factoextra)
+fviz_nbclust(df, FUN = hcut, method = "wss")
+```
+
+Elbow method suggests 4 group is the optimal cluster size
+
+```{r}
+# Cut tree into 4 groups
+sub_grp <- cutree(hc, k = 4)
+
+# Number of members in each cluster
+table(sub_grp)
+
+```
+
+See how the boroughs are cut by 4 groups
+
+```{r}
+plot(hc, cex = 0.6)
+rect.hclust(hc, k = 4, border = 2:5)
+```
+
+### Cluster characteristics
+
+```{r message=False, warning=False, results='asis'}
+# assign clusters back to rate df
+merged_boro <- data.frame(merged_boro) %>% 
+  mutate(cluster= as.character(sub_grp))
+
+merged_boro %>% 
+  group_by(cluster) %>% 
+  summarise(across(ss_rate:crime_rate, median)) %>% 
+  kable(., caption = 'Cluster Statistics')
+```
+
+Plot the cluster map
+
+```{r}
+merged_boro <- merged_boro %>% 
+  left_join(., boroMap %>% dplyr::select(GSS_CODE, geometry),
+            by = "GSS_CODE") %>% 
+  st_as_sf() 
+
+tm_shape(merged_boro) + 
+  tm_fill("cluster", palette = "viridis")
+```
+
+Cluster stats
+
+```{r}
+ggplot(merged_boro, aes(x='', y=ss_rate, color=cluster)) +
+  geom_boxplot()
+```
+
+## MSOA Spatial Autocorrelation
 
 We have explored the point pattern analysis for London S&S and what about the ward patterns? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by ward.
 
 The demographic data was obtained from <https://data.london.gov.uk/dataset/ward-profiles-and-atlas>.
 
 ```{r message=FALSE, warning=FALSE}
-wardData <- read_csv("https://data.london.gov.uk/download/ward-profiles-and-atlas/150584ff-3509-4e17-91d1-315ed4557419/ward-atlas-data.csv",na = c("NA", "n/a")) %>% 
+msoaData <- read_csv("https://data.london.gov.uk/download/msoa-atlas/20264159-36cb-4aa2-8371-ae884ae83e88/msoa-data.csv",na = c("NA", "n/a")) %>% 
   clean_names() 
 ```
 
-Clean up column names
+Notice msoaData has 984 rows while the msoaMap has 983 rows. After inspection, the msoaData has an extra row showing the average statistics for all London msoa, which needs to be removed.
 
 ```{r}
-wardData <- wardData %>% 
-  rename(old_code = "x1",
-         new_code = "x2",
-         borough_name = "x3",
-         ward_name = "x4")
+msoaData <- msoaData[1:983,]
 ```
 
-Notice wardData has 629 rows while the wardMap has 625 rows. After inspection, wardData's last three rows are national statistics and the first row is a part of column name, which need to be removed.
-
-```{r message=FALSE}
-wardData <- wardData[2:626,]
-```
-
-Columns we need:
-
-> -   "population_and_age_all_ages_2011"
->
-> *the above can calculate violent crime rate and overall S&S rate by dividing by the number of crimes/S&S in each geographic unit*
->
-> -   "diversity_ethnic_group_5\_groups_2011_census_white",
-> -   "diversity_ethnic_group_5\_groups_2011_census_asian_or_asian_british",
-> -   "diversity_ethnic_group_5\_groups_2011_census_black_or_black_british",
-> -   "diversity_ethnic_group_5\_groups_2011_census_other",
->
-> *the above can calculate specific S&S rate for each ethnic group because the S&S data also has ethnic data*
->
-> -   "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
-> -   "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
-> -   "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
-> -   "indices_of_deprivation_idaci_2010",
-> -   "indices_of_deprivation_idaopi_2010",
->
-> *the above might be useful in spatial autocorrelation and regression model*
+Select columns we need
 
 ```{r message=FALSE, warning=FALSE}
 cols <- c(
-"new_code",
-"population_and_age_all_ages_2011",
-"diversity_ethnic_group_5_groups_2011_census_white",
-"diversity_ethnic_group_5_groups_2011_census_asian_or_asian_british",
-"diversity_ethnic_group_5_groups_2011_census_black_or_black_british",                         
-"diversity_ethnic_group_5_groups_2011_census_other",
-"employment_economic_activity_percentages_2011_census_economically_inactive_percent",
-"employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
-"qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
-"indices_of_deprivation_idaci_2010",
-"indices_of_deprivation_idaopi_2010")
+"middle_super_output_area",
+"msoa_name",
+"age_structure_2011_census_all_ages",
+"ethnic_group_2011_census_white",                                               
+"ethnic_group_2011_census_asian_asian_british",
+"ethnic_group_2011_census_black_african_caribbean_black_british",
+"ethnic_group_2011_census_other_ethnic_group", 
+"ethnic_group_2011_census_white_percent",
+"ethnic_group_2011_census_asian_asian_british_percent",
+"ethnic_group_2011_census_black_african_caribbean_black_british_percent",
+"ethnic_group_2011_census_other_ethnic_group_percent",
+"economic_activity_2011_census_unemployment_rate",
+"household_income_estimates_2011_12_total_mean_annual_household_income",
+"household_income_estimates_2011_12_total_median_annual_household_income",
+"income_deprivation_2010_percent_living_in_income_deprived_households_reliant_on_means_tested_benefit",
+"income_deprivation_2010_percent_of_people_aged_over_60_who_live_in_pension_credit_households",
+"health_2011_census_bad_health_percent",
+"car_or_van_availability_2011_census_no_cars_or_vans_in_household_percent")
 
-wardDataMerged <-
-  left_join(wardMap %>% dplyr::select(NAME,GSS_CODE,geometry),
-            wardData %>% dplyr::select(all_of(cols)),
-            by = c("GSS_CODE" = "new_code")) %>% 
-  rename(all_population = "population_and_age_all_ages_2011",
-         white_pop = "diversity_ethnic_group_5_groups_2011_census_white",
-         asian_pop = "diversity_ethnic_group_5_groups_2011_census_asian_or_asian_british",
-         black_pop = "diversity_ethnic_group_5_groups_2011_census_black_or_black_british",
-         otherEth_pop = "diversity_ethnic_group_5_groups_2011_census_other",
-         econ_inac_rate = "employment_economic_activity_percentages_2011_census_economically_inactive_percent",
-         unemployed_loneParent_rate = "employment_lone_parent_not_in_employment_2011_census_lone_parent_not_in_employment_percent",
-         no_qualification_rate = "qualifications_qualifications_and_students_2011_census_percent_no_qualifications",
-         ward_name = "NAME",
-         ward_code = "GSS_CODE",
-         idaci_index = "indices_of_deprivation_idaci_2010",
-         idaopi_index = "indices_of_deprivation_idaopi_2010") 
+# rename variables
+msoaDataMerged <-
+  left_join(msoaMap %>% dplyr::select(MSOA11CD,MSOA11NM,geometry),
+            msoaData %>% dplyr::select(all_of(cols)),
+            by = c("MSOA11CD" = "middle_super_output_area")) %>% 
+  rename(all_population = "age_structure_2011_census_all_ages",
+         white_pop = "ethnic_group_2011_census_white",
+         asian_pop = "ethnic_group_2011_census_asian_asian_british",
+         black_pop = "ethnic_group_2011_census_black_african_caribbean_black_british",
+         otherEth_pop = "ethnic_group_2011_census_other_ethnic_group",
+         white_pop_rate = "ethnic_group_2011_census_white_percent",
+         asian_pop_rate = "ethnic_group_2011_census_asian_asian_british_percent",
+         black_pop_rate = "ethnic_group_2011_census_black_african_caribbean_black_british_percent",
+         otherEth_pop_rate = "ethnic_group_2011_census_other_ethnic_group_percent",
+         unemp_rate = "economic_activity_2011_census_unemployment_rate",
+         mean_income_rate = "household_income_estimates_2011_12_total_mean_annual_household_income",
+         median_income_rate = "household_income_estimates_2011_12_total_median_annual_household_income",
+         income_deprivation_rate = "income_deprivation_2010_percent_living_in_income_deprived_households_reliant_on_means_tested_benefit",
+         income_old_deprivation_rate = "income_deprivation_2010_percent_of_people_aged_over_60_who_live_in_pension_credit_households",
+         bad_health_rate = "health_2011_census_bad_health_percent",
+         cars_rate = "car_or_van_availability_2011_census_no_cars_or_vans_in_household_percent")
 
-# convert column types to numeric
-cols.num <- c("all_population",  "white_pop", "asian_pop",
-              "black_pop", "otherEth_pop", "econ_inac_rate", 
-              "unemployed_loneParent_rate", "no_qualification_rate", 
-              "idaci_index","idaopi_index")
-wardDataMerged[cols.num] <- sapply(wardDataMerged[cols.num],as.numeric)
-
-# calculate population percent
-wardDataMerged <- wardDataMerged %>% 
-  dplyr::mutate(white_pop_rate = white_pop / all_population*100,
-         asian_pop_rate = asian_pop / all_population*100,
-         black_pop_rate = black_pop / all_population*100,
-         otherEth_pop_rate = otherEth_pop / all_population*100) %>% 
-  mutate_if(is.numeric, ~round(., 2))
-         
 ```
 
-Count all S&S (section 60) for each ethnic group that fall within wards.
+Count all S&S for each ethnic group that fall within MSOAs.
 
 ```{r message=FALSE}
-ss60_count <- st_join(ss60_london, wardMap) %>% 
-  group_by(GSS_CODE, officer_defined_ethnicity) %>% 
+ss_count <- st_join(ss_london, msoaMap) %>% 
+  group_by(MSOA11CD, officer_defined_ethnicity) %>% 
   summarise(., count=n(),) %>%
   st_drop_geometry() %>% 
   pivot_wider(names_from = officer_defined_ethnicity, values_from = count) %>% 
   rename(NA_eth = "NA") %>% 
-  mutate(total_ss60 = sum(c_across(Asian:NA_eth), na.rm = TRUE)) %>% 
-  dplyr::rename(ss60_black = "Black",
-                ss60_white = "White",
-                ss60_asian = "Asian",
-                ss60_other = "Other",
-                ss60_na = "NA_eth") 
+  mutate(total_ss = sum(c_across(Asian:NA_eth), na.rm = TRUE)) %>% 
+  dplyr::rename(ss_black = "Black",
+                ss_white = "White",
+                ss_asian = "Asian",
+                ss_other = "Other",
+                ss_na = "NA_eth") 
 ```
 
 Count all violent crimes that fall within wards.
 
 ```{r message=FALSE}
-vio_count <- st_join(violence_london, wardMap) %>% 
-  group_by(GSS_CODE) %>% 
+crime_count <- st_join(crime_london, msoaMap) %>% 
+  group_by(MSOA11CD) %>% 
   summarise(., count=n(),) %>%
-  arrange(desc(GSS_CODE)) %>% 
+  arrange(desc(MSOA11CD)) %>% 
   st_drop_geometry() %>% 
   na.omit(.) %>% 
-  dplyr::rename(total_violent_crime = "count")
+  dplyr::rename(total_crime_count = "count")
 ```
 
-Count successful S&S (s60) that leading to an arrest.
+Count successful S&S that leading to an arrest.
 
 ```{r message=FALSE, warning=FALSE}
-arrest_count <- st_join(ss60_london, wardMap) %>% 
+arrest_count <- st_join(ss_london, msoaMap) %>% 
   filter(outcome=="Arrest") %>% 
-  group_by(GSS_CODE, officer_defined_ethnicity) %>% 
+  group_by(MSOA11CD, officer_defined_ethnicity) %>% 
   summarise(., arrest_count=n(),) %>%
-  arrange(desc(GSS_CODE)) %>% 
+  arrange(desc(MSOA11CD)) %>% 
   st_drop_geometry() %>% 
   pivot_wider(names_from = officer_defined_ethnicity, values_from = arrest_count) %>% 
   rename(NA_eth = "NA") %>% 
-  mutate(total_arrest = sum(c_across(Black:NA_eth), na.rm = TRUE)) %>% 
+  mutate(total_arrest = sum(c_across(Asian:Other), na.rm = TRUE)) %>% 
   dplyr::rename(arrest_black = "Black",
                 arrest_white = "White",
                 arrest_asian = "Asian",
                 arrest_other = "Other",
                 arrest_na = "NA_eth") 
+```
 
-merged <- left_join(wardDataMerged, vio_count, by = c("ward_code" = "GSS_CODE")) %>% 
-  left_join(., ss60_count, by = c("ward_code" = "GSS_CODE")) %>% 
-  left_join(., arrest_count, by = c("ward_code" = "GSS_CODE"))
-  
+Join demographic data with crime data.
+
+```{r}
+merged <- left_join(msoaDataMerged, crime_count, by = c("MSOA11CD" = "MSOA11CD")) %>% 
+  left_join(., ss_count, by = c("MSOA11CD" = "MSOA11CD")) %>% 
+  left_join(., arrest_count, by = "MSOA11CD")
 ```
 
 Calculate rates.
@@ -1115,26 +1213,36 @@ Calculate rates.
 ```{r message=FALSE}
 all_data <- merged %>% 
   clean_names() %>%   
-  # total violent crime rate 
-  mutate(total_vio_rate = total_violent_crime/
+  # total crime rate 
+  mutate(total_crime_rate = total_crime_count/
            all_population *100) %>% 
-  mutate(total_vio_prop = total_violent_crime/
-           sum(total_violent_crime) *100) %>% 
-  # total S&S rate
-  mutate(total_search_rate = total_ss60 / 
+  # total crime proportion
+  mutate(total_crime_prop = total_crime_count/
+           sum(total_crime_count) *100) %>% 
+  # total search rate
+  mutate(total_search_rate = total_ss / 
            all_population *100) %>%
+  # total arrest rate
+  mutate(total_arrest_rate = total_arrest/
+           all_population *100) %>% 
   # total hit rate 
-  mutate(total_hit_rate = total_arrest/ total_ss60 *100) %>% 
+  mutate(total_hit_rate = total_arrest/ 
+           total_ss *100) %>% 
   # search rate for ethical groups 
-  mutate(black_search_rate = ss60_black/ black_pop *100) %>% 
-  mutate(white_search_rate = ss60_white/ white_pop *100) %>% 
-  mutate(asian_search_rate = ss60_asian/ asian_pop *100) %>% 
-  mutate(other_search_rate = ss60_other/ other_eth_pop *100) %>% 
+  mutate(black_search_rate = ss_black/ black_pop *100) %>% 
+  mutate(white_search_rate = ss_white/ white_pop *100) %>% 
+  mutate(asian_search_rate = ss_asian/ asian_pop *100) %>% 
+  mutate(other_search_rate = ss_other/ other_eth_pop *100) %>% 
   # hit rates for ethical groups 
-  mutate(black_hit_rate = arrest_black/ ss60_black *100) %>% 
-  mutate(white_hit_rate = arrest_white/ ss60_white *100) %>% 
-  mutate(asian_hit_rate = arrest_asian/ ss60_asian *100) %>% 
-  mutate(other_hit_rate = arrest_other/ ss60_other *100) %>% 
+  mutate(black_hit_rate = arrest_black/ ss_black *100) %>% 
+  mutate(white_hit_rate = arrest_white/ ss_white *100) %>% 
+  mutate(asian_hit_rate = arrest_asian/ ss_asian *100) %>% 
+  mutate(other_hit_rate = arrest_other/ ss_other *100) %>% 
+  # arrest rates for ethical groups
+  mutate(black_arrest_rate = arrest_black/ black_pop *100) %>% 
+  mutate(white_arrest_rate = arrest_white/ white_pop *100) %>% 
+  mutate(asian_arrest_rate = arrest_asian/ asian_pop *100) %>% 
+  mutate(other_arrest_rate = arrest_other/ other_eth_pop *100) %>% 
   mutate_if(is.numeric, ~round(., 2))
 
 ```
@@ -1145,13 +1253,13 @@ Hit rate is, what proportion of searches, by race, were successful? If racial gr
 
 ```{r message=False, warning=False, results='asis'}
 # count the number of searches by race
-HR1 <- ss60_london %>% 
+HR1 <- ss_london %>% 
   group_by(officer_defined_ethnicity) %>% 
   summarise(., searches=n()) %>% 
   st_drop_geometry()
   
 # count the number of successful searches leading to arrest 
-HR2 <- ss60_london %>% 
+HR2 <- ss_london %>% 
   group_by(officer_defined_ethnicity) %>% 
   filter(outcome=="Arrest") %>% 
   summarise(., arrests=n()) %>% 
@@ -1164,22 +1272,73 @@ wP <- sum(as.numeric(all_data$white_pop), na.rm = TRUE)
 oP <- sum(as.numeric(all_data$other_eth_pop), na.rm = TRUE)
 
 left_join(HR1, HR2) %>% 
-  mutate(search_prop = searches/sum(searches) *100,
+  mutate(population = c(aP, bP, oP, wP, 0),
+         search_prop = searches/sum(searches) *100,
          arrest_prop = arrests/sum(arrests) *100,
-         population = c(aP, bP, oP, wP, 0),
          population_prop = population/sum(population) *100,
          search_rate = searches/population *100,
+         arrest_rate = arrests/population *100,
          hit_rate = arrests/searches *100) %>% 
   dplyr::rename(race = "officer_defined_ethnicity") %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
   kable(.,)
 ```
 
+### Search Plot
+
+```{r}
+summary(all_data$black_search_rate)
+summary(all_data$white_search_rate)
+summary(all_data$asian_search_rate)
+summary(all_data$other_search_rate)
+```
+
+```{r}
+all_data_plot <- all_data %>% 
+  dplyr::select(black_search_rate,
+                white_search_rate,
+                asian_search_rate,
+                other_search_rate,
+                black_hit_rate,
+                white_hit_rate,
+                asian_hit_rate,
+                other_hit_rate,
+                black_arrest_rate,
+                white_arrest_rate,
+                asian_arrest_rate,
+                other_arrest_rate) %>% 
+  mutate(black_search_compare = case_when(
+    (black_search_rate >= 1.34 & black_search_rate < 8.4) ~ "Very Low",
+    (black_search_rate >= 8.4 & black_search_rate < 23.6) ~ "Low",
+    (black_search_rate >= 23.6 & black_search_rate < 26.22) ~ "High", 
+    (black_search_rate >= 26.22 ~ "Very High")))
+
+a <- all_data_plot %>% 
+  dplyr::select(black_search_rate, black_search_compare)
+
+tm_shape(all_data_plot) + 
+  tm_fill("black_search_compare", palette="viridis")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            main.title.position = "left",
+            main.title.fontface = "bold",
+            main.title="wards S&S (section 60) search rate", 
+            main.title.size=1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(f)", position=c(0,0.6), size=1)
+```
+
 ### Search rate & Hit rate comparison
 
 ```{r message=FALSE, warning=FALSE}
-# select columns we need 
-cols_s <- c("ward_code",
+# select columns we need but first change the msoa code name 
+all_data <- all_data %>% 
+  rename(msoa_code = "msoa11cd")
+
+cols_s <- c("msoa_code",
           "black_search_rate", 
           "white_search_rate", 
           "asian_search_rate", 
@@ -1188,9 +1347,16 @@ cols_h <- c("black_hit_rate",
             "white_hit_rate",
             "asian_hit_rate",
             "other_hit_rate",
-            "ward_code")
+            "msoa_code")
+cols_a <- c("black_arrest_rate",
+            "white_arrest_rate",
+            "asian_arrest_rate",
+            "other_arrest_rate",
+            "msoa_code")
+
 search_data <- all_data[cols_s]
 hit_data <- all_data[cols_h]
+arrest_data <- all_data[cols_a]
 
 # pivot longer 
 search_df <- search_data %>% 
@@ -1204,10 +1370,19 @@ hit_df <- hit_data %>%
   pivot_longer(cols = ends_with("hit_rate"),
                names_to = c("race", ".value"),
                names_sep = '\\_')
-# join two df
+
+arrest_df <- arrest_data %>% 
+  st_drop_geometry() %>% 
+  pivot_longer(cols = ends_with("arrest_rate"),
+               names_to = c("race", ".value"),
+               names_sep = '\\_')
+
+# join df
 main_data <- left_join(search_df, hit_df) %>% 
+  left_join(., arrest_df) %>% 
   rename(search_rate = "search",
-         hit_rate = "hit") 
+         hit_rate = "hit",
+         arrest_rate = "arrest") 
   #mutate_at(c(3,4), funs(c(scale(.))))
 
 # convert NAs to zero
@@ -1257,7 +1432,7 @@ main_data_white <- main_data %>%
   spread(race, hit_rate, fill=0) %>% 
   rename(white_hit_rate = white) %>% 
   gather(minority_race, minority_hit_rate, c(black, asian, other)) %>%
-  arrange(ward_code)
+  arrange(msoa_code)
 ```
 
 Plot
@@ -1294,14 +1469,14 @@ Add the number of searches to the hit rate df
 
 ```{r}
 search_count <- all_data %>% 
-  dplyr::select("ward_code", "ss60_asian", "ss60_black", "ss60_white", "ss60_other") %>% 
+  dplyr::select("msoa_code", "ss_asian", "ss_black", "ss_white", "ss_other") %>% 
   st_drop_geometry(.) %>% 
-  pivot_longer(cols = ! (ward_code | ss60_white),
+  pivot_longer(cols = ! (msoa_code | ss_white),
                names_to = "minority_race",
-               names_prefix = "ss60_",
+               names_prefix = "ss_",
                values_to = "minority_search_counts") %>% 
-  rename(white_search_counts = ss60_white) %>% 
-  arrange(ward_code)
+  rename(white_search_counts = ss_white) %>% 
+  arrange(msoa_code)
 
 # convert NAs to zero
 search_count[is.na(search_count)] <- 0
@@ -1309,7 +1484,7 @@ search_count[is.na(search_count)] <- 0
 # join df
 main_data_white <- left_join(main_data_white, 
                              search_count, 
-                             by = c("ward_code", "minority_race")) %>% 
+                             by = c("msoa_code", "minority_race")) %>% 
   mutate(all_search_count = minority_search_counts + white_search_counts)
 ```
 
@@ -1324,7 +1499,7 @@ main_data_white %>%
     x = white_hit_rate,
     y = minority_hit_rate
   )) +
-  geom_point(aes(color=all_search_count), pch = 21) +
+  geom_point(aes(color=all_search_count, size=all_search_count), pch = 21) +
   scale_fill_viridis_c(option = "viridis",
                        aesthetics = c("colour", "fill")) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
@@ -1338,35 +1513,12 @@ main_data_white %>%
 
 ### Investigate anomalies
 
-There are many wards that do not have any of the S&S (60), let's extract them and compare with its violent crime rate
+Examine the outliers of black/white/Asian search rate, arrest rate and hit rate
 
-```{r message=FALSE, warning=FALSE}
-# extract wards with zero S&S 60 and compare their violent crime rate with the London average
-no_ss <- all_data %>% 
-  na.omit(.) %>% 
-  filter(total_ss60 == 0) %>% 
-  dplyr::select(ward_code, ward_name, total_violent_crime, total_vio_prop) %>% 
-  arrange(desc(total_vio_prop)) %>% 
-  mutate(LDcompare = case_when(total_vio_prop > 0.1602 ~ "above London average",
-                               TRUE ~ "below London average")) 
-no_ss %>% 
-  st_drop_geometry() %>% 
-  group_by(LDcompare) %>% 
-  summarise(., count=n())
-```
+```{r}
+ggplot(main_data, aes(x='', y=search_rate, color=race)) +
+  geom_boxplot()
 
-There are 9 wards that having violent crime rate above London's average but no S&S, what are their borough name?
-
-```{r warning=FALSE, message=FALSE, results='asis'}
-no_ss %>% 
-  filter(LDcompare == "above London average") %>% 
-  st_drop_geometry() %>% 
-  left_join(., 
-            wardMap %>% dplyr::select(GSS_CODE, BOROUGH),
-            by = c("ward_code" = "GSS_CODE")) %>% 
-  group_by(BOROUGH, ward_name) %>% 
-  summarise(., count=n()) %>% 
-  kable()
 ```
 
 ## Spatial autocorrelation
@@ -1375,7 +1527,7 @@ Create a subset data of all rates for later parts.
 
 ```{r}
 all_rates <- all_data %>% 
-  dplyr::select(ends_with("rate") | ward_code | idaci_index | idaopi_index) 
+  dplyr::select(ends_with("rate") | msoa_code)
 ```
 
 Create a neighborhoods list and spatial weight matrix.
@@ -1412,18 +1564,18 @@ Moran's I test tells us whether we have clustered values (close to 1) or dispers
 
 ```{r}
 # variables used for the test
-variable_names <- c( "total_vio_rate",
-                     "total_search_rate",
-                     "total_hit_rate",
-                     "black_search_rate",
+variable_names <- c( "black_search_rate",
                      "white_search_rate",
                      "asian_search_rate",
-                     "other_search_rate",
                      "black_hit_rate",
                      "white_hit_rate",
                      "asian_hit_rate",
-                     "other_hit_rate"
-                     )
+                     "black_arrest_rate",
+                     "white_arrest_rate",
+                     "asian_arrest_rate",
+                     "black_pop_rate",
+                     "white_pop_rate",
+                     "asian_pop_rate")
 
 # function to compute coefficient
 cal_coef <- function(x) {
@@ -1492,18 +1644,6 @@ datalist
 Calculate local Moran's I for several important variables for inspecting racial discrimination of search rate and hit rate.
 
 ```{r}
-moranI_total_search <- all_rates %>%
-  pull(total_search_rate) %>%
-  as.vector()%>%
-  localmoran(., Lward_lw, zero.policy = TRUE)%>%
-  as_tibble()
-
-moranI_total_hit <- all_rates %>%
-  pull(total_hit_rate) %>%
-  as.vector()%>%
-  localmoran(., Lward_lw, zero.policy = TRUE)%>%
-  as_tibble()
-
 moranI_black_search <- all_rates %>%
   pull(black_search_rate) %>%
   as.vector()%>%
@@ -1540,32 +1680,20 @@ moranI_asian_hit <- all_rates %>%
   localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
 
-moranI_asian_pop <- all_rates %>% 
-  pull(asian_pop_rate) %>%
+moranI_asian_arrest <- all_rates %>% 
+  pull(asian_arrest_rate) %>%
   as.vector()%>%
   localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
 
-moranI_black_pop <- all_rates %>% 
-  pull(black_pop_rate) %>%
+moranI_black_arrest <- all_rates %>% 
+  pull(black_arrest_rate) %>%
   as.vector()%>%
   localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
 
-moranI_white_pop <- all_rates %>% 
-  pull(white_pop_rate) %>%
-  as.vector()%>%
-  localmoran(., Lward_lw, zero.policy = TRUE)%>%
-  as_tibble()
-
-moranI_idaci <- all_rates %>% 
-  pull(idaci_index) %>%
-  as.vector()%>%
-  localmoran(., Lward_lw, zero.policy = TRUE)%>%
-  as_tibble()
-
-moranI_idaopi <- all_rates %>% 
-  pull(idaopi_index) %>%
+moranI_white_arrest <- all_rates %>% 
+  pull(white_arrest_rate) %>%
   as.vector()%>%
   localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
@@ -1575,22 +1703,20 @@ copy the Moran's I score and the z-score standard deviation back to all_rates da
 
 ```{r}
 all_rates <- all_rates %>% 
-  mutate(total_search_Iz = as.numeric(moranI_total_search$Z.Ii)) %>% 
-  mutate(total_hit_Iz = as.numeric(moranI_total_hit$Z.Ii)) %>% 
   mutate(black_search_Iz = as.numeric(moranI_black_search$Z.Ii)) %>% 
   mutate(white_search_Iz = as.numeric(moranI_white_search$Z.Ii)) %>% 
   mutate(asian_search_Iz = as.numeric(moranI_asian_search$Z.Ii)) %>% 
   mutate(black_hit_Iz = as.numeric(moranI_black_hit$Z.Ii)) %>% 
   mutate(white_hit_Iz = as.numeric(moranI_white_hit$Z.Ii)) %>% 
   mutate(asian_hit_Iz = as.numeric(moranI_asian_hit$Z.Ii)) %>% 
-  mutate(black_pop_Iz = as.numeric(moranI_black_pop$Z.Ii)) %>% 
-  mutate(white_pop_Iz = as.numeric(moranI_white_pop$Z.Ii)) %>% 
-  mutate(asian_pop_Iz = as.numeric(moranI_asian_pop$Z.Ii)) %>% 
-  mutate(idaci_Iz = as.numeric(moranI_idaci$Z.Ii)) %>% 
-  mutate(idaopi_Iz = as.numeric(moranI_idaopi$Z.Ii))
+  mutate(black_arrest_Iz = as.numeric(moranI_black_arrest$Z.Ii)) %>% 
+  mutate(white_arrest_Iz = as.numeric(moranI_white_arrest$Z.Ii)) %>% 
+  mutate(asian_arrest_Iz = as.numeric(moranI_asian_arrest$Z.Ii)) 
 ```
 
 We'll set the breaks manually based on the rule that data points \>2.58 or \<-2.58 standard deviations away from the mean are significant at the 99% level (\<1% chance that autocorrelation not present); \>1.96 - \<2.58 or \<-1.96 to \>-2.58 standard deviations are significant at the 95% level (\<5% change that autocorrelation not present). \>1.65 = 90% etc.
+
+#### Maps
 
 ```{r}
 breaks1<-c(-1000,-2.58,-1.96,-1.65,1.65,1.96,2.58,1000)
@@ -1603,17 +1729,14 @@ t1 <- tm_shape(all_rates) +
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, Black Search Rate") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, Black S&S search rate in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
-            legend.text.size = 0.3,
+            legend.text.size = 0.3,            
             legend.outside = FALSE,
-            legend.position = c(.8,0))+
+            legend.position = c(.8,0)) +
   tm_credits("(a)", position=c(0,0.8), size=1)
 
 
@@ -1623,13 +1746,10 @@ t2 <- tm_shape(all_rates) +
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, White Search Rate") +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, White S&S search rate in London", 
-            main.title.size=1,
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
@@ -1642,13 +1762,10 @@ t3 <- tm_shape(all_rates) +
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, Asian Search Rate") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, Asian S&S search rate in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
@@ -1661,13 +1778,10 @@ t4 <- tm_shape(all_rates) +
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, Black Hit Rate") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, Black S&S hit rate in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
@@ -1680,13 +1794,10 @@ t5 <- tm_shape(all_rates) +
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, White Hit Rate") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, White S&S hit rate in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
@@ -1699,52 +1810,43 @@ t6 <- tm_shape(all_rates) +
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, Asian Hit Rate") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, Asian S&S hit rate in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
   tm_credits("(f)", position=c(0,0.8), size=1)
 
-
 t7 <- tm_shape(all_rates) + 
-  tm_polygons("black_pop_Iz",
+  tm_polygons("black_arrest_Iz",
         style="fixed",
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, Black Arrest Rate") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, Black population proportion in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
   tm_credits("(g)", position=c(0,0.8), size=1)
 
+
 t8 <- tm_shape(all_rates) + 
-  tm_polygons("white_pop_Iz",
+  tm_polygons("white_arrest_Iz",
         style="fixed",
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, White Arrest Rate ") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, White population proportion in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
@@ -1752,153 +1854,33 @@ t8 <- tm_shape(all_rates) +
   tm_credits("(h)", position=c(0,0.8), size=1)
 
 t9 <- tm_shape(all_rates) + 
-  tm_polygons("asian_pop_Iz",
+  tm_polygons("asian_arrest_Iz",
         style="fixed",
         breaks=breaks1,
         palette= "viridis",
         midpoint=NA,
-        title="Local Moran's I") +
+        title="Local Moran's I, Asian Arrest Rate") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, Asian population proportion in London", 
-            main.title.size=1,
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
-  tm_credits("(f)", position=c(0,0.8), size=1)
+  tm_credits("(i)", position=c(0,0.8), size=1)
 
-t10 <- tm_shape(all_rates) + 
-  tm_polygons("idaci_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, idaci index", 
-            main.title.size=1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(g)", position=c(0,0.8), size=1)
-
-t11 <- tm_shape(all_rates) + 
-  tm_polygons("idaopi_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="Local Moran's I, idaopi index", 
-            main.title.size=1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(h)", position=c(0,0.8), size=1)
-
-t=tmap_arrange(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
+t=tmap_arrange(t1, t2, t3, t7, t8, t9, t4, t5, t6,
+               nrow = 3,
+               ncol = 3)
 
 t
 ```
 
-## Agglomerative Hierarchical Clustering
-
-Detailed tutorial found at <https://uc-r.github.io/hc_clustering>
-
-```{r message=FALSE}
-library(tidyverse)  # data manipulation
-library(cluster)    # clustering algorithms
-library(factoextra) # clustering visualization
-
-df <- subset(all_rates,select=-ward_code) %>% 
-  st_drop_geometry() %>% 
-  scale(.)
-```
-
-To determine which clustering method I choose use, agnes function can calculate the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure).
-
-```{r}
-# methods to assess
-m <- c( "average", "single", "complete", "ward")
-names(m) <- c( "average", "single", "complete", "ward")
-
-# function to compute coefficient
-ac <- function(x) {
-  agnes(df, method = x)$ac
-}
-
-map_dbl(m, ac) 
-```
-
-Clearly, Ward method can identify the strongest clustering structures.
-
-```{r}
-# Dissimilarity matrix
-d <- dist(df, method = "euclidean")
-
-# Hierarchical clustering using Ward Linkage
-hc <- hclust(d, method = "ward.D2")
-
-# Plot the obtained dendrogram
-plot(hc, hang=-1, labels=FALSE)
-```
-
-To determine the optimal cluster number:
-
-1\. Elbow Method 2. Average Silhouette Method (haven't explored yet)
-
-```{r}
-# use Elbow Method first  
-library(factoextra)
-fviz_nbclust(df, FUN = hcut, method = "wss")
-```
-
-```{r}
-# Cut tree into 4 groups
-sub_grp <- cutree(hc, k = 4)
-
-# Number of members in each cluster
-table(sub_grp)
-```
-
-### Explore cluster characteristics
-
-```{r message=False, warning=False, results='asis'}
-# assign clusters back to rate df
-df_cluster <- subset(all_rates) %>% 
-  mutate(cluster=sub_grp)
-
-df_cluster%>% 
-  st_drop_geometry() %>% 
-  group_by(cluster) %>% 
-  summarise(across(econ_inac_rate:other_hit_rate, median)) %>% 
-  kable(., caption = 'Cluster Statistics')
-```
-
-Plot the cluster map
-
-```{r}
-tm_shape(df_cluster) + 
-  tm_fill("cluster", palette = "viridis")
-```
-
 ## Regression Models
 
-From the hierarchical clustering result we can see variables such as unemployment rate, lone parent without employment rate, etc are positively correlated with search rate and hit rate. Therefore, it is reasonable to investigate their relationships more thoroughly.
+The local moran's I test suggests different ethic groups have different hot-spots of frequently searched places and arrested places. Therefore, it is reasonable to investigate each of the ethnic group in terms of their search rate and arrest rate more thoroughly.
 
-### Observation plot
+### Maps
 
 ```{r}
 tm2 <- tm_shape(all_rates) + 
@@ -2802,9 +2784,4 @@ model_sem <- errorsarlm(search_log_rate ~ vio_log_rate + econ_inac_rate +
                   method = "eigen")
 
 summary(model_sem)
-```
-
-```{r}
-tm_shape(all_rates) + 
-  tm_fill("black_hit_rate", palette = "viridis")
 ```
