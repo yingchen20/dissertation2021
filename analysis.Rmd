@@ -34,6 +34,7 @@ library(spdep)
 library(ggplot2)
 library(ggpubr)
 library(factoextra) 
+library(knitr)
 ```
 
 ## Understand London Crime in general
@@ -105,30 +106,34 @@ crime<- crime %>%
            crs = 4326) %>% 
   st_transform(., 27700) 
 
-crime_london <- crime[msoaMap,]
+crime_london <- crime[boroMap,]
 ```
 
-Create a table counting crime numbers for each type.
+Create a table counting total crime numbers for each crime type.
 
-```{r message=False, warning=False, results='asis'}
+```{r message=False, warning=False}
 library(knitr)
 crime_london %>% 
   group_by(crime_type) %>% 
   summarise(., count=n(),) %>%
+  mutate(prop = count/sum(count) *100) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
   arrange(desc(count)) %>% 
   st_drop_geometry() %>% 
-  kable(., caption = 'London crimes by types from April 2019 to April 2021')
+  kable(.)
 ```
 
 I want to count the number of crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names. (*later to break down into different years*)
 
 ```{r message=False, warning=False, results='asis'}
-crime_london$boro_name = substr(crime_london$lsoa_name,1,nchar(crime_london$lsoa_name)-4)
+crime_london$boro_name = substr(crime_london$lsoa_name,1,nchar(crime_london$lsoa_name)-5)
 
 crime_london %>% 
   group_by(boro_name) %>% 
   summarise(., count=n(),) %>% 
-  arrange(desc(count)) %>% 
+  mutate(prop = count/sum(count) *100) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
+  arrange(desc(prop)) %>% 
   st_drop_geometry() %>% 
   kable(., caption = 'London crimes by boroughs from April 2019 to April 2021')
 ```
@@ -160,48 +165,56 @@ ss <- ss %>%
 ss_london <- ss[wardMap,]
 ```
 
-What are the common legislation and search object during S&S?
+Check how police distributes their power on stop and search -- Searches for what?
 
-```{r message=False, warning=False, results='asis'}
-ss_london %>% 
+```{r message=False, warning=False}
+ssTab <- ss_london %>% 
   group_by(legislation, object_of_search) %>% 
-  summarise(., count=n(),) %>%
-  arrange(desc(count)) %>% 
-  st_drop_geometry() %>% 
-  kable(., caption = 'London S&S by legislation and search objects from April 2019 to April 2021')
-```
+  summarise(., searches=n(),) %>%
+  st_drop_geometry()
 
-What are the most common outcome of people being S&S?
+arrestTab <- ss_london %>% 
+  filter(outcome=="Arrest") %>% 
+  group_by(legislation, object_of_search) %>% 
+  summarise(., arrests=n(),) %>%
+  st_drop_geometry()
 
-```{r message=False, warning=False, results='asis'}
-ss_london %>% 
-  group_by(outcome) %>% 
-  summarise(., count=n(),) %>%
-  mutate(prop = count/sum(count) *100) %>% 
+left_join(ssTab, arrestTab, by = c("legislation", "object_of_search")) %>% 
+  as.data.frame() %>% 
+  mutate(search_rate = searches/sum(searches) *100,
+         hit_rate = arrests/searches *100) %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
-  arrange(desc(prop)) %>% 
-  st_drop_geometry() %>% 
-  kable(.)
+  arrange(desc(hit_rate)) %>% 
+  kable()
 ```
 
-What are the most common ethnicity of successful S&S?
+Who are searched and arrested?
 
-```{r message=False, warning=False, results='asis'}
-ss_london %>%  
+```{r warning=FALSE, message=FALSE}
+arrestRaceTab <- ss_london %>%  
   filter(outcome == "Arrest") %>% 
   group_by(legislation, officer_defined_ethnicity) %>% 
-  summarise(., count=n()) %>%
-  mutate(prop = count/sum(count) *100) %>% 
+  summarise(., arrests=n()) %>%
+  st_drop_geometry()
+
+ssRaceTab <- ss_london %>%  
+  group_by(legislation, officer_defined_ethnicity) %>% 
+  summarise(., searches=n()) %>%
+  st_drop_geometry()
+
+left_join(ssRaceTab, arrestRaceTab, by=c("legislation", "officer_defined_ethnicity")) %>% 
+  as.data.frame() %>% 
+  mutate(search_rate = searches/sum(searches) *100,
+         hit_rate = arrests/searches *100) %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
   arrange(desc(legislation)) %>% 
-  st_drop_geometry() %>% 
-  kable(.)
+  kable()
 ```
 
-### Overall trend map
+### Map: Trend
 
 ```{r}
-# ss60_london %>% 
+# ss_london %>% 
 #   count(year = year(date), officer_defined_ethnicity) %>% 
 #   ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
 #   geom_point() +
@@ -977,25 +990,64 @@ merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>%
   left_join(., crime_count_boro) %>% 
   left_join(., pop_boro %>% dplyr::select(code, gla_population_estimate_2017),
             by = c("GSS_CODE" = "code")) %>% 
-  rename(pop = "gla_population_estimate_2017") %>% 
+  rename(pop = "gla_population_estimate_2017",
+         boro_name = "NAME") %>% 
   mutate(ss_rate = total_ss_count/pop *100,
          arrest_rate = total_arrest_count/pop *100,
          crime_rate = total_crime_count/pop *100) %>% 
-  mutate_if(is.numeric, ~round(., 2))
+  mutate_if(is.numeric, ~round(., 2)) %>% 
+  as.data.frame()
 
+```
+
+Calculate the most dominant crime type in each borough and its percentage
+
+```{r warning=F, message=F}
+totalCrimeTab <- crime_london %>% 
+  group_by(boro_name) %>% 
+  summarise(., count=n(),) %>% 
+  mutate(total_crime_prop = count/sum(count) *100) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
+  st_drop_geometry()
+
+# Select the row with the maximum value in each group
+boroCrimeTab <- crime_london %>% 
+  group_by(boro_name, crime_type) %>% 
+  summarise(., sub_crime_count=n(),) %>% 
+  group_by(boro_name) %>% 
+  top_n(1, sub_crime_count) %>% 
+  st_drop_geometry()
+
+mergedCrimeTab <- left_join(totalCrimeTab, boroCrimeTab, by="boro_name") %>% 
+  mutate(major_crime_prop = sub_crime_count/count *100) %>% 
+  rename(total_crimes = "count",
+         major_crimes = "sub_crime_count") %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
+  as.data.frame()
+
+# adding the dominant crime type to the previous df
+merged_boro_all <- left_join(merged_boro, mergedCrimeTab, by="boro_name")
+```
+
+```{r results='asis'}
+mergedCrimeTab %>% arrange(desc(total_crime_prop)) %>% 
+  kable()
+```
+
+```{r}
 # select columns to clustering
-df <- data.frame(merged_boro) %>% 
-  dplyr::select(NAME, GSS_CODE, ss_rate, arrest_rate, crime_rate)
+df <- data.frame(merged_boro_all) %>% 
+  dplyr::select(boro_name, GSS_CODE, ss_rate, arrest_rate, crime_rate)
 
 # scale the ss_rate, arrest_rate and crime_rate
 df[c(3:5)] <- scale(df[c(3:5)])
 
 # set borough name as rownames
-rownames(df) <- df$NAME 
+rownames(df) <- df$boro_name 
 
 # remove the original NAME column
 df <- df %>% 
-  dplyr::select(-NAME)
+  dplyr::select(-boro_name)
 ```
 
 ### Agglomerative clustering
@@ -1028,9 +1080,7 @@ hc <- hclust(d, method = "ward.D2")
 plot(hc, cex = 0.6, hang = -1)
 ```
 
-To determine the optimal cluster number:
-
-1\. Elbow Method 2. Average Silhouette Method
+To determine the optimal cluster number using the Elbow Method
 
 ```{r warning=FALSE}
 # use Elbow Method first  
@@ -1046,7 +1096,6 @@ sub_grp <- cutree(hc, k = 4)
 
 # Number of members in each cluster
 table(sub_grp)
-
 ```
 
 See how the boroughs are cut by 4 groups
@@ -1060,10 +1109,10 @@ rect.hclust(hc, k = 4, border = 2:5)
 
 ```{r message=False, warning=False, results='asis'}
 # assign clusters back to rate df
-merged_boro <- data.frame(merged_boro) %>% 
+merged_boro_all <- data.frame(merged_boro_all) %>% 
   mutate(cluster= as.character(sub_grp))
 
-merged_boro %>% 
+merged_boro_all %>% 
   group_by(cluster) %>% 
   summarise(across(ss_rate:crime_rate, median)) %>% 
   kable(., caption = 'Cluster Statistics')
@@ -1072,20 +1121,45 @@ merged_boro %>%
 Plot the cluster map
 
 ```{r}
-merged_boro <- merged_boro %>% 
+# according to the cluster stats, rename clusters 
+merged_boro_all$cluster[merged_boro_all$cluster == "1"] <- 
+  "Low Search, Low Arrest, Low Crime"
+merged_boro_all$cluster[merged_boro_all$cluster == "2"] <- 
+  "Medium Search, Medium Arrest, Medium Crime"
+merged_boro_all$cluster[merged_boro_all$cluster == "3"] <- 
+  "High Search, High Arrest, High Crime"
+merged_boro_all$cluster[merged_boro_all$cluster == "4"] <- 
+  "Very High Search, Very High Arrest, Very High Crime"
+
+# add geometry and plot
+merged_boro_all <- merged_boro_all %>% 
   left_join(., boroMap %>% dplyr::select(GSS_CODE, geometry),
             by = "GSS_CODE") %>% 
   st_as_sf() 
-
-tm_shape(merged_boro) + 
-  tm_fill("cluster", palette = "viridis")
 ```
 
-Cluster stats
+### Maps
 
-```{r}
-ggplot(merged_boro, aes(x='', y=ss_rate, color=cluster)) +
-  geom_boxplot()
+```{r warning=F, message=F}
+tm_shape(merged_boro_all) + 
+  tm_fill("cluster", 
+          palette="viridis",
+          title = "Crime Clusters in London",
+          legend.hist=FALSE,
+          title.fontface = "bold") +
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.6,
+            legend.text.size = 0.5,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            title.fontface = "bold") +
+  #tm_credits("(a)", position=c(0,0.85), size=1) +
+  tm_compass(type = "4star", size = 3, fontsize = 0.5,
+             color.dark = "gray60", text.color = "gray60",
+             position = c("left", "bottom")) +
+  tm_scale_bar(color.dark = "gray60",
+               position = c("left", "bottom")) 
 ```
 
 ## MSOA Spatial Autocorrelation
@@ -1284,7 +1358,7 @@ left_join(HR1, HR2) %>%
   kable(.,)
 ```
 
-### Search Plot
+### Below/Above S&S Avg.
 
 ```{r}
 summary(all_data$black_search_rate)
