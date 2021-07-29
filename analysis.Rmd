@@ -188,6 +188,27 @@ left_join(ssTab, arrestTab, by = c("legislation", "object_of_search")) %>%
   kable()
 ```
 
+```{r results='asis'}
+ssTab <- ss_london %>% 
+  group_by(legislation) %>% 
+  summarise(., searches=n(),) %>%
+  st_drop_geometry()
+
+arrestTab <- ss_london %>% 
+  filter(outcome=="Arrest") %>% 
+  group_by(legislation) %>% 
+  summarise(., arrests=n(),) %>%
+  st_drop_geometry()
+
+left_join(ssTab, arrestTab, by = "legislation") %>% 
+  as.data.frame() %>% 
+  mutate(search_prop = searches/sum(searches) *100,
+         hit_rate = arrests/searches *100) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
+  arrange(desc(hit_rate)) %>% 
+  kable()
+```
+
 Who are searched and arrested?
 
 ```{r warning=FALSE, message=FALSE}
@@ -214,11 +235,11 @@ left_join(ssRaceTab, arrestRaceTab, by=c("legislation", "officer_defined_ethnici
 ### Map: Trend
 
 ```{r}
-# ss_london %>% 
-#   count(year = year(date), officer_defined_ethnicity) %>% 
-#   ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
-#   geom_point() +
-#   geom_line() 
+ss_london %>%
+  count(year = year(date), officer_defined_ethnicity) %>%
+  ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
+  geom_point() +
+  geom_line()
 ```
 
 ## dbscan
@@ -965,12 +986,6 @@ ss_count_boro <- st_join(ss_london, boroMap) %>%
   st_drop_geometry() %>% 
   na.omit()
 
-crime_count_boro <- st_join(crime_london, boroMap) %>% 
-  group_by(GSS_CODE, NAME) %>% 
-  summarise(., total_crime_count=n(),) %>%
-  st_drop_geometry() %>% 
-  na.omit()
-
 arrest_count_boro <- st_join(ss_london, boroMap) %>% 
   filter(outcome=="Arrest") %>% 
   group_by(GSS_CODE, NAME) %>% 
@@ -978,23 +993,52 @@ arrest_count_boro <- st_join(ss_london, boroMap) %>%
   st_drop_geometry() %>% 
   na.omit()
 
-# add population data at borough level
-pop_boro <- read_csv("https://data.london.gov.uk/download/london-borough-profiles/c1693b82-68b1-44ee-beb2-3decf17dc1f8/london-borough-profiles.csv", na = c("NA", "n/a")) %>% 
+object_search_boro <- st_join(ss_london, boroMap) %>% 
+  group_by(GSS_CODE, object_of_search) %>% 
+  summarise(., object_searched_count=n(),) %>% 
+  group_by(GSS_CODE) %>% 
+  top_n(1, object_searched_count) %>% 
+  st_drop_geometry() %>% 
+  na.omit()
+
+crime_count_boro <- st_join(crime_london, boroMap) %>% 
+  group_by(GSS_CODE, NAME) %>% 
+  summarise(., total_crime_count=n(),) %>%
+  st_drop_geometry() %>% 
+  na.omit()
+
+# Select the row with the maximum value in each group
+crime_max_boro <- st_join(crime_london, boroMap) %>% 
+  group_by(GSS_CODE, crime_type) %>% 
+  summarise(., major_crime_count=n(),) %>% 
+  group_by(GSS_CODE) %>% 
+  top_n(1, major_crime_count) %>% 
+  st_drop_geometry()
+
+# add population data and inner and outer london classification at borough level
+boroData <- read_csv("https://data.london.gov.uk/download/london-borough-profiles/c1693b82-68b1-44ee-beb2-3decf17dc1f8/london-borough-profiles.csv", na = c("NA", "n/a")) %>% 
   clean_names()
 
 # trim unuseful rows 
-pop_boro <- pop_boro[1:33,]
+boroData <- boroData[1:33,]
 
 # merge all df together 
 merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>% 
+  left_join(., object_search_boro) %>% 
   left_join(., crime_count_boro) %>% 
-  left_join(., pop_boro %>% dplyr::select(code, gla_population_estimate_2017),
+  left_join(., crime_max_boro) %>% 
+  left_join(., boroData %>% dplyr::select(code, inner_outer_london,
+                                          gla_population_estimate_2017),
             by = c("GSS_CODE" = "code")) %>% 
   rename(pop = "gla_population_estimate_2017",
-         boro_name = "NAME") %>% 
+         boro_name = "NAME",
+         inner_outer = "inner_outer_london") %>% 
   mutate(ss_rate = total_ss_count/pop *100,
          arrest_rate = total_arrest_count/pop *100,
-         crime_rate = total_crime_count/pop *100) %>% 
+         crime_rate = total_crime_count/pop *100,
+         hit_rate = total_arrest_count/total_ss_count *100,
+         object_search_prop = object_searched_count/total_ss_count *100,
+         major_crime_prop =  major_crime_count/total_crime_count *100) %>% 
   mutate_if(is.numeric, ~round(., 2)) %>% 
   as.data.frame()
 
@@ -1019,9 +1063,12 @@ boroCrimeTab <- crime_london %>%
   st_drop_geometry()
 
 mergedCrimeTab <- left_join(totalCrimeTab, boroCrimeTab, by="boro_name") %>% 
+  left_join(., boroData %>% dplyr::select(area_name, inner_outer_london),
+            by=c("boro_name" = "area_name")) %>% 
   mutate(major_crime_prop = sub_crime_count/count *100) %>% 
   rename(total_crimes = "count",
-         major_crimes = "sub_crime_count") %>% 
+         major_crimes = "sub_crime_count",
+         major_crime_type = "crime_type") %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
   as.data.frame()
 
@@ -1030,8 +1077,29 @@ merged_boro_all <- left_join(merged_boro, mergedCrimeTab, by="boro_name")
 ```
 
 ```{r results='asis'}
-mergedCrimeTab %>% arrange(desc(total_crime_prop)) %>% 
+merged_boro_all %>% 
+  dplyr::select(boro_name,
+                inner_outer,
+                crime_rate,
+               major_crime_type,
+               major_crime_prop) %>% 
+  arrange(desc(crime_rate)) %>% 
   kable()
+```
+
+The hit rate is very inconsistent across boroughs
+
+```{r}
+summary(merged_boro_all$hit_rate)
+summary(merged_boro_all$ss_rate)
+```
+
+```{r results='asis'}
+merged_boro_all %>% 
+  group_by(inner_outer) %>% 
+  summarise_at(vars(ss_rate, arrest_rate, crime_rate, hit_rate),list(~mean(., trim = .2, na.rm=T))) %>% 
+  kable()
+
 ```
 
 ```{r}
@@ -1118,6 +1186,11 @@ merged_boro_all %>%
   kable(., caption = 'Cluster Statistics')
 ```
 
+```{r results='asis'}
+merged_boro_all %>% arrange(desc(cluster)) %>% 
+  kable()
+```
+
 Plot the cluster map
 
 ```{r}
@@ -1141,32 +1214,65 @@ merged_boro_all <- merged_boro_all %>%
 ### Maps
 
 ```{r warning=F, message=F}
-tm_shape(merged_boro_all) + 
+# add inner and outer london london outline
+innerOuterLondon <- st_read(here::here("data","lp-falp-2006-inner-outer-london-shp", 
+                              "lp-falp-2006-inner-outer-london.shp")) %>% 
+  st_transform(., 27700)
+
+cluster_map <- tm_shape(merged_boro_all) + 
   tm_fill("cluster", 
           palette="viridis",
           title = "Crime Clusters in London",
           legend.hist=FALSE,
-          title.fontface = "bold") +
+          title.fontface = "bold") +  
+  tm_shape(innerOuterLondon) +
+  tm_polygons(col = NA,
+              alpha = 0.01,
+              border.col = "red",
+              lwd=1.5) +
   tm_borders(col = NA, alpha = 0.1) +
   tm_layout(legend.title.size = 0.6,
             legend.text.size = 0.5,
             legend.outside = FALSE,
             frame = FALSE,
             legend.position = c(.8,0),
-            title.fontface = "bold") +
-  #tm_credits("(a)", position=c(0,0.85), size=1) +
+            legend.title.fontface = "bold") +
   tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             color.dark = "gray60", text.color = "gray60",
              position = c("left", "bottom")) +
-  tm_scale_bar(color.dark = "gray60",
-               position = c("left", "bottom")) 
+  tm_scale_bar(position = c("left", "bottom")) 
+
+tmap_save(cluster_map, "output/cluster_map.png",outer.margins = 0.2,dpi=500)
+```
+
+```{r}
+tm_shape(merged_boro_all) + 
+  tm_fill("cluster", 
+          palette="viridis",
+          title = "Crime Clusters in London",
+          legend.hist=FALSE,
+          title.fontface = "bold") +  
+  tm_shape(innerOuterLondon) +
+  tm_polygons(col = NA,
+              alpha = 0.01,
+              border.col = "red",
+              lwd=1.5) +
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.7,
+            legend.text.size = 0.4,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            legend.title.fontface = "bold") +
+  tm_compass(type = "4star", size = 3, fontsize = 0.5,
+             position = c("left", "bottom")) +
+  tm_scale_bar(position = c("left", "bottom")) 
 ```
 
 ## MSOA Spatial Autocorrelation
 
-We have explored the point pattern analysis for London S&S and what about the ward patterns? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by ward.
+We have explored the point pattern analysis for London S&S and what about the MSOA patterns? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by msoa.
 
-The demographic data was obtained from <https://data.london.gov.uk/dataset/ward-profiles-and-atlas>.
+The demographic data was obtained from <https://data.london.gov.uk/dataset/msoa-atlas>.
 
 ```{r message=FALSE, warning=FALSE}
 msoaData <- read_csv("https://data.london.gov.uk/download/msoa-atlas/20264159-36cb-4aa2-8371-ae884ae83e88/msoa-data.csv",na = c("NA", "n/a")) %>% 
@@ -1356,6 +1462,7 @@ left_join(HR1, HR2) %>%
   dplyr::rename(race = "officer_defined_ethnicity") %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
   kable(.,)
+
 ```
 
 ### Below/Above S&S Avg.
@@ -1386,23 +1493,21 @@ all_data_plot <- all_data %>%
     (black_search_rate >= 8.4 & black_search_rate < 23.6) ~ "Low",
     (black_search_rate >= 23.6 & black_search_rate < 26.22) ~ "High", 
     (black_search_rate >= 26.22 ~ "Very High")))
+```
 
-a <- all_data_plot %>% 
-  dplyr::select(black_search_rate, black_search_compare)
-
+```{r}
 tm_shape(all_data_plot) + 
-  tm_fill("black_search_compare", palette="viridis")+
+  tm_fill("black_search_compare", 
+          palette="viridis",
+          title="Black Search Rate Comparison")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
-            main.title.position = "left",
-            main.title.fontface = "bold",
-            main.title="wards S&S (section 60) search rate", 
-            main.title.size=1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
-  tm_credits("(f)", position=c(0,0.6), size=1)
+  tm_credits("(a)", position=c(0,0.8), size=1.5)
+
 ```
 
 ### Search rate & Hit rate comparison
