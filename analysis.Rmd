@@ -235,11 +235,11 @@ left_join(ssRaceTab, arrestRaceTab, by=c("legislation", "officer_defined_ethnici
 ### Map: Trend
 
 ```{r}
-ss_london %>%
-  count(year = year(date), officer_defined_ethnicity) %>%
-  ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
-  geom_point() +
-  geom_line()
+# ss_london %>%
+#   count(year = year(date), officer_defined_ethnicity) %>%
+#   ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
+#   geom_point() +
+#   geom_line()
 ```
 
 ## Borough Clustering
@@ -289,7 +289,7 @@ crime_max_boro <- st_join(crime_london, boroMap) %>%
   st_drop_geometry()
 ```
 
-```{r}
+```{r message=F, warning=FALSE}
 # add population data and inner and outer london classification at borough level
 boroData <- read_csv("https://data.london.gov.uk/download/london-borough-profiles/c1693b82-68b1-44ee-beb2-3decf17dc1f8/london-borough-profiles.csv", na = c("NA", "n/a")) %>% 
   clean_names()
@@ -298,7 +298,7 @@ boroData <- read_csv("https://data.london.gov.uk/download/london-borough-profile
 boroData <- boroData[1:33,]
 ```
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 # merge all df together 
 merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>% 
   left_join(., object_search_boro) %>% 
@@ -309,7 +309,8 @@ merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>%
             by = c("GSS_CODE" = "code")) %>% 
   rename(pop = "gla_population_estimate_2017",
          boro_name = "NAME",
-         inner_outer = "inner_outer_london") %>% 
+         inner_outer = "inner_outer_london",
+         major_crime_type = "crime_type") %>% 
   mutate(ss_rate = total_ss_count/pop *100,
          arrest_rate = total_arrest_count/pop *100,
          crime_rate = total_crime_count/pop *100,
@@ -323,7 +324,7 @@ merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>%
 Show the stats table what objects are commonly searched in each borough
 
 ```{r results='asis'}
-merged_boro_all %>% 
+merged_boro %>% 
   dplyr::select(boro_name,
                 inner_outer,
                 crime_rate,
@@ -335,32 +336,45 @@ merged_boro_all %>%
 
 Show the stats table what objects are commonly searched in each borough
 
-```{r}
+```{r results='asis'}
+merged_boro %>% 
+  dplyr::select(boro_name,
+                inner_outer,
+                ss_rate,
+                arrest_rate,
+                hit_rate,
+               object_of_search,
+               object_search_prop) %>% 
+  arrange(desc(object_search_prop)) %>% 
+  kable()
 
 ```
 
 The hit rate is very inconsistent across boroughs
 
 ```{r}
-summary(merged_boro_all$hit_rate)
-summary(merged_boro_all$ss_rate)
+summary(merged_boro$hit_rate)
+summary(merged_boro$ss_rate)
+summary(merged_boro$arrest_rate)
 ```
 
 ```{r results='asis'}
-merged_boro_all %>% 
+merged_boro %>% 
   group_by(inner_outer) %>% 
   summarise_at(vars(ss_rate, arrest_rate, crime_rate, hit_rate),list(~mean(., trim = .2, na.rm=T))) %>% 
   kable()
 
 ```
 
+Prepare data for clustering
+
 ```{r}
 # select columns to clustering
-df <- data.frame(merged_boro_all) %>% 
-  dplyr::select(boro_name, GSS_CODE, ss_rate, arrest_rate, crime_rate)
+df <- data.frame(merged_boro) %>% 
+  dplyr::select(boro_name, GSS_CODE, inner_outer, ss_rate, arrest_rate, crime_rate, hit_rate)
 
 # scale the ss_rate, arrest_rate and crime_rate
-df[c(3:5)] <- scale(df[c(3:5)])
+df[c(4:7)] <- scale(df[c(4:7)])
 
 # set borough name as rownames
 rownames(df) <- df$boro_name 
@@ -429,35 +443,30 @@ rect.hclust(hc, k = 4, border = 2:5)
 
 ```{r message=False, warning=False, results='asis'}
 # assign clusters back to rate df
-merged_boro_all <- data.frame(merged_boro_all) %>% 
+merged_boro <- data.frame(merged_boro) %>% 
   mutate(cluster= as.character(sub_grp))
 
-merged_boro_all %>% 
+merged_boro %>% 
   group_by(cluster) %>% 
-  summarise(across(ss_rate:crime_rate, median)) %>% 
+  summarise(across(ss_rate:hit_rate, median)) %>% 
   kable(., caption = 'Cluster Statistics')
 ```
 
-```{r results='asis'}
-merged_boro_all %>% arrange(desc(cluster)) %>% 
-  kable()
-```
-
-Plot the cluster map
+Rename the cluster label
 
 ```{r}
-# according to the cluster stats, rename clusters 
-merged_boro_all$cluster[merged_boro_all$cluster == "1"] <- 
-  "Low Search, Low Arrest, Low Crime"
-merged_boro_all$cluster[merged_boro_all$cluster == "2"] <- 
-  "Medium Search, Medium Arrest, Medium Crime"
-merged_boro_all$cluster[merged_boro_all$cluster == "3"] <- 
-  "High Search, High Arrest, High Crime"
-merged_boro_all$cluster[merged_boro_all$cluster == "4"] <- 
-  "Very High Search, Very High Arrest, Very High Crime"
+# # according to the cluster stats, rename clusters 
+# merged_boro$cluster[merged_boro$cluster == "1"] <- 
+#   "Low Search, Low Arrest, Low Crime"
+# merged_boro$cluster[merged_boro$cluster == "2"] <- 
+#   "Medium Search, Medium Arrest, Medium Crime"
+# merged_boro$cluster[merged_boro$cluster == "3"] <- 
+#   "High Search, High Arrest, High Crime"
+# merged_boro$cluster[merged_boro$cluster == "4"] <- 
+#   "Very High Search, Very High Arrest, Very High Crime"
 
 # add geometry and plot
-merged_boro_all <- merged_boro_all %>% 
+merged_boro <- merged_boro %>% 
   left_join(., boroMap %>% dplyr::select(GSS_CODE, geometry),
             by = "GSS_CODE") %>% 
   st_as_sf() 
@@ -471,7 +480,7 @@ innerOuterLondon <- st_read(here::here("data","lp-falp-2006-inner-outer-london-s
                               "lp-falp-2006-inner-outer-london.shp")) %>% 
   st_transform(., 27700)
 
-cluster_map <- tm_shape(merged_boro_all) + 
+cluster_map <- tm_shape(merged_boro) + 
   tm_fill("cluster", 
           palette="viridis",
           title = "Crime Clusters in London",
@@ -497,10 +506,10 @@ tmap_save(cluster_map, "output/cluster_map.png",outer.margins = 0.2,dpi=500)
 ```
 
 ```{r}
-tm_shape(merged_boro_all) + 
+tm_shape(merged_boro) + 
   tm_fill("cluster", 
           palette="viridis",
-          title = "Crime Clusters in London",
+          title = "Clusters",
           legend.hist=FALSE,
           title.fontface = "bold") +  
   tm_shape(innerOuterLondon) +
@@ -720,10 +729,10 @@ left_join(HR1, HR2) %>%
 ### Below/Above S&S Avg.
 
 ```{r}
-summary(all_data$black_search_rate)
-summary(all_data$white_search_rate)
-summary(all_data$asian_search_rate)
-summary(all_data$other_search_rate)
+summary(all_data$black_hit_rate)
+summary(all_data$white_hit_rate)
+summary(all_data$asian_hit_rate)
+summary(all_data$other_hit_rate)
 ```
 
 ```{r}
@@ -740,25 +749,82 @@ all_data_plot <- all_data %>%
                 white_arrest_rate,
                 asian_arrest_rate,
                 other_arrest_rate) %>% 
-  mutate(black_search_compare = case_when(
-    (black_search_rate >= 1.34 & black_search_rate < 8.4) ~ "Very Low",
-    (black_search_rate >= 8.4 & black_search_rate < 23.6) ~ "Low",
-    (black_search_rate >= 23.6 & black_search_rate < 26.22) ~ "High", 
-    (black_search_rate >= 26.22 ~ "Very High")))
+  mutate(black_hit_compare = case_when(
+    (black_hit_rate < 10.09) ~ "Very Low",
+    (black_hit_rate >= 10.09 & black_hit_rate < 12.4) ~ "Low",
+    (black_hit_rate >= 12.4 & black_hit_rate < 16.13) ~ "High", 
+    (black_hit_rate >= 16.13 ~ "Very High")),
+    white_hit_compare = case_when(
+    (white_hit_rate < 10.14) ~ "Very Low",
+    (white_hit_rate >= 10.14 & white_hit_rate < 12.6) ~ "Low",
+    (white_hit_rate >= 12.6 & white_hit_rate < 16.56) ~ "High", 
+    (white_hit_rate >= 16.56 ~ "Very High")),
+    asian_hit_compare = case_when(
+    (asian_hit_rate < 7.275) ~ "Very Low",
+    (asian_hit_rate >= 7.275 & asian_hit_rate < 9.4) ~ "Low",
+    (asian_hit_rate >= 9.4 & asian_hit_rate < 13.64) ~ "High", 
+    (asian_hit_rate >= 13.64 ~ "Very High")),
+    other_hit_compare = case_when(
+    (other_hit_rate < 9.09) ~ "Very Low",
+    (other_hit_rate >= 9.09 & other_hit_rate < 10.7) ~ "Low",
+    (other_hit_rate >= 10.7 & other_hit_rate < 20) ~ "High", 
+    (other_hit_rate >= 20 ~ "Very High")))
 ```
 
+Plot
+
 ```{r}
-tm_shape(all_data_plot) + 
-  tm_fill("black_search_compare", 
+p1 <- tm_shape(all_data_plot) + 
+  tm_fill("black_hit_compare", 
           palette="viridis",
-          title="Black Search Rate Comparison")+
+          title="Black Hit Rate Comparison")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(a)", position=c(0,0.8), size=1.5)
+            legend.position = c(.8,0)) +
+  tm_credits("(a)", position=c(0,0.8), size=1)
+
+p2 <- tm_shape(all_data_plot) + 
+  tm_fill("white_hit_compare", 
+          palette="viridis",
+          title="White Hit Rate Comparison")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(b)", position=c(0,0.8), size=1)
+
+p3 <- tm_shape(all_data_plot) + 
+  tm_fill("asian_hit_compare", 
+          palette="viridis",
+          title="Asian Hit Rate Comparison")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(c)", position=c(0,0.8), size=1)
+
+p4 <- tm_shape(all_data_plot) + 
+  tm_fill("other_hit_compare", 
+          palette="viridis",
+          title="Other Ethnic Group Hit Rate Comparison")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(d)", position=c(0,0.8), size=1)
+
+p <- tmap_arrange(p1, p2, p3, p4)
+p
+
 
 ```
 
@@ -802,18 +868,10 @@ hit_df <- hit_data %>%
                names_to = c("race", ".value"),
                names_sep = '\\_')
 
-arrest_df <- arrest_data %>% 
-  st_drop_geometry() %>% 
-  pivot_longer(cols = ends_with("arrest_rate"),
-               names_to = c("race", ".value"),
-               names_sep = '\\_')
-
 # join df
 main_data <- left_join(search_df, hit_df) %>% 
-  left_join(., arrest_df) %>% 
   rename(search_rate = "search",
-         hit_rate = "hit",
-         arrest_rate = "arrest") 
+         hit_rate = "hit") 
   #mutate_at(c(3,4), funs(c(scale(.))))
 
 # convert NAs to zero
@@ -922,10 +980,7 @@ main_data_white <- left_join(main_data_white,
 plot
 
 ```{r}
-main_data_white_nonzero <- main_data_white %>% 
-  filter(all_search_count != 0 )
-
-main_data_white %>% 
+hit_rate_plot <- main_data_white %>% 
   ggplot(aes(
     x = white_hit_rate,
     y = minority_hit_rate
@@ -940,16 +995,83 @@ main_data_white %>%
     limits = c(0, max_hit_rate + 0.01)) +
   coord_fixed() +
   facet_grid(. ~ minority_race)
+
+ggsave("output/hit_rate_comparion_plot.png")
+
 ```
 
 ### Investigate anomalies
 
-Examine the outliers of black/white/Asian search rate, arrest rate and hit rate
+```{r}
+# Examine the zeros in asian hit rate 
+test <- all_data %>% 
+  dplyr::select(msoa_code, black_hit_rate, white_hit_rate, asian_hit_rate, other_hit_rate) %>% 
+  st_drop_geometry()
+
+# convert NAs to zero
+test[is.na(test)] <- 0
+
+test_0 <- test %>% 
+  filter(asian_hit_rate==0) %>% 
+  dplyr::select(msoa_code) %>% 
+  left_join(.,
+            all_data %>% dplyr::select(msoa_code, msoa_name,
+                                       asian_pop_rate,
+                                       asian_search_rate, 
+                                       arrest_asian),
+            by="msoa_code")
+
+# add borough name to test_0 df
+test_0$boro_name = substr(test_0$msoa_name,1,nchar(test_0$msoa_name)-4)
+
+# examine asian's population in those areas
+summary(test_0$asian_pop_rate)
+# compared with all areas's asian population avg.
+summary(all_data$asian_pop_rate)
+
+# compare list0's asian ssrate
+summary(test_0$asian_search_rate)
+# with the national average
+summary(all_data$asian_search_rate)
+```
+
+Thus, counting all London's MSOA's, on average a MSOA is made of 18% of Asian people, for those MSOA having empty Asian hit rate but non-empty White hit rate, it might because of the population.
+
+```{r warning=F, message=F, results='asis'}
+test_0 <- test_0 %>% 
+  mutate(asian_pop_compare = case_when(
+    (asian_pop_rate < 18) ~ "Below London Average",
+    TRUE ~ "Above London Average"),
+    asian_ss_compare = case_when(
+      (asian_search_rate < 5.93) ~ "Below London Average",
+      TRUE ~ "Above London Average"
+    )) 
+
+test_0 %>% 
+  group_by(asian_pop_compare)%>%
+  summarise(., count=n()) %>% 
+  kable()
+
+test_0 %>% 
+  group_by(asian_ss_compare)%>%
+  summarise(., count=n()) %>% 
+  kable()
+
+test_0 %>% 
+  filter((asian_pop_compare=="Below London Average") & (asian_ss_compare=="Above London Average")) %>% 
+  kable()
+```
 
 ```{r}
-ggplot(main_data, aes(x='', y=search_rate, color=race)) +
-  geom_boxplot()
+asia0 <- test_0 %>% 
+  filter((asian_pop_compare=="Below London Average") & (asian_ss_compare=="Above London Average")) %>% 
+  filter(msoa_code != "E02000077") %>% 
+  st_as_sf() 
 
+tm_shape(boroMap) +
+  tm_polygons() +
+tm_shape(asia0) + 
+  tm_polygons("msoa_name", palette="red")
 ```
 
 ## Spatial autocorrelation
