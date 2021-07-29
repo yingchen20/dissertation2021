@@ -1014,14 +1014,18 @@ crime_max_boro <- st_join(crime_london, boroMap) %>%
   group_by(GSS_CODE) %>% 
   top_n(1, major_crime_count) %>% 
   st_drop_geometry()
+```
 
+```{r}
 # add population data and inner and outer london classification at borough level
 boroData <- read_csv("https://data.london.gov.uk/download/london-borough-profiles/c1693b82-68b1-44ee-beb2-3decf17dc1f8/london-borough-profiles.csv", na = c("NA", "n/a")) %>% 
   clean_names()
 
 # trim unuseful rows 
 boroData <- boroData[1:33,]
+```
 
+```{r}
 # merge all df together 
 merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>% 
   left_join(., object_search_boro) %>% 
@@ -1041,40 +1045,9 @@ merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>%
          major_crime_prop =  major_crime_count/total_crime_count *100) %>% 
   mutate_if(is.numeric, ~round(., 2)) %>% 
   as.data.frame()
-
 ```
 
-Calculate the most dominant crime type in each borough and its percentage
-
-```{r warning=F, message=F}
-totalCrimeTab <- crime_london %>% 
-  group_by(boro_name) %>% 
-  summarise(., count=n(),) %>% 
-  mutate(total_crime_prop = count/sum(count) *100) %>% 
-  mutate_if(is.numeric, ~round(., 1)) %>% 
-  st_drop_geometry()
-
-# Select the row with the maximum value in each group
-boroCrimeTab <- crime_london %>% 
-  group_by(boro_name, crime_type) %>% 
-  summarise(., sub_crime_count=n(),) %>% 
-  group_by(boro_name) %>% 
-  top_n(1, sub_crime_count) %>% 
-  st_drop_geometry()
-
-mergedCrimeTab <- left_join(totalCrimeTab, boroCrimeTab, by="boro_name") %>% 
-  left_join(., boroData %>% dplyr::select(area_name, inner_outer_london),
-            by=c("boro_name" = "area_name")) %>% 
-  mutate(major_crime_prop = sub_crime_count/count *100) %>% 
-  rename(total_crimes = "count",
-         major_crimes = "sub_crime_count",
-         major_crime_type = "crime_type") %>% 
-  mutate_if(is.numeric, ~round(., 1)) %>% 
-  as.data.frame()
-
-# adding the dominant crime type to the previous df
-merged_boro_all <- left_join(merged_boro, mergedCrimeTab, by="boro_name")
-```
+Show the stats table what objects are commonly searched in each borough
 
 ```{r results='asis'}
 merged_boro_all %>% 
@@ -1085,6 +1058,12 @@ merged_boro_all %>%
                major_crime_prop) %>% 
   arrange(desc(crime_rate)) %>% 
   kable()
+```
+
+Show the stats table what objects are commonly searched in each borough
+
+```{r}
+
 ```
 
 The hit rate is very inconsistent across boroughs
