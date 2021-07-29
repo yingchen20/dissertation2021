@@ -41,6 +41,8 @@ library(factoextra)
 library(knitr)
 ```
 
+## Data Preparation 
+
 ```{r message=FALSE}
 boroMap <- st_read(here::here("data","statistical-gis-boundaries-london", "ESRI",
                               "London_Borough_Excluding_MHW.shp"))%>%
@@ -107,8 +109,6 @@ crime<- crime %>%
 
 crime_london <- crime[boroMap,]
 ```
-
-## Understand stop and search (S&S) data
 
 Search for stop and search data (ends with -metropolitan-stop-and-search.csv).
 
@@ -861,11 +861,3 @@ leaflet(data = clusters) %>%
                lat = ~latitude, 
                lng = ~longitude)
 ```
-
-
-
-
-
-
-
-
