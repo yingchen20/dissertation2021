@@ -232,7 +232,7 @@ left_join(ssRaceTab, arrestRaceTab, by=c("legislation", "officer_defined_ethnici
   kable()
 ```
 
-### Map: Trend
+### Trend?
 
 ```{r}
 # ss_london %>%
@@ -455,15 +455,15 @@ merged_boro %>%
 Rename the cluster label
 
 ```{r}
-# # according to the cluster stats, rename clusters 
-# merged_boro$cluster[merged_boro$cluster == "1"] <- 
-#   "Low Search, Low Arrest, Low Crime"
-# merged_boro$cluster[merged_boro$cluster == "2"] <- 
-#   "Medium Search, Medium Arrest, Medium Crime"
-# merged_boro$cluster[merged_boro$cluster == "3"] <- 
-#   "High Search, High Arrest, High Crime"
-# merged_boro$cluster[merged_boro$cluster == "4"] <- 
-#   "Very High Search, Very High Arrest, Very High Crime"
+# according to the cluster stats, rename clusters
+merged_boro$cluster[merged_boro$cluster == "1"] <-
+  "low crimes, low S&S and outcomes  "
+merged_boro$cluster[merged_boro$cluster == "2"] <-
+  "medium crimes, medium S&S and outcomes"
+merged_boro$cluster[merged_boro$cluster == "3"] <-
+  "high crimes, high S&S and outcomes"
+merged_boro$cluster[merged_boro$cluster == "4"] <-
+  "very high crimes, very high S&S and outcomes"
 
 # add geometry and plot
 merged_boro <- merged_boro %>% 
@@ -503,30 +503,6 @@ cluster_map <- tm_shape(merged_boro) +
   tm_scale_bar(position = c("left", "bottom")) 
 
 tmap_save(cluster_map, "output/cluster_map.png",outer.margins = 0.2,dpi=500)
-```
-
-```{r}
-tm_shape(merged_boro) + 
-  tm_fill("cluster", 
-          palette="viridis",
-          title = "Clusters",
-          legend.hist=FALSE,
-          title.fontface = "bold") +  
-  tm_shape(innerOuterLondon) +
-  tm_polygons(col = NA,
-              alpha = 0.01,
-              border.col = "red",
-              lwd=1.5) +
-  tm_borders(col = NA, alpha = 0.1) +
-  tm_layout(legend.title.size = 0.7,
-            legend.text.size = 0.4,
-            legend.outside = FALSE,
-            frame = FALSE,
-            legend.position = c(.8,0),
-            legend.title.fontface = "bold") +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
 ```
 
 ## MSOA Spatial Autocorrelation
@@ -726,7 +702,7 @@ left_join(HR1, HR2) %>%
 
 ```
 
-### Below/Above S&S Avg.
+### Hit rate
 
 ```{r}
 summary(all_data$black_hit_rate)
@@ -834,7 +810,7 @@ p
 p1 <- tm_shape(all_data_plot) + 
   tm_fill("black_hit_rate", 
           style="jenks",
-          palette="viridis",
+          palette="plasma",
           title="Black Hit Rate (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
@@ -847,7 +823,7 @@ p1 <- tm_shape(all_data_plot) +
 p2 <- tm_shape(all_data_plot) + 
   tm_fill("white_hit_rate", 
           style="jenks",
-          palette="viridis",
+          palette="Set2",
           title="White Hit Rate (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
@@ -860,7 +836,7 @@ p2 <- tm_shape(all_data_plot) +
 p3 <- tm_shape(all_data_plot) + 
   tm_fill("asian_hit_rate", 
           style="jenks",
-          palette="viridis",
+          palette="Set1",
           title="Asian Hit Rate (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
@@ -873,7 +849,7 @@ p3 <- tm_shape(all_data_plot) +
 p4 <- tm_shape(all_data_plot) + 
   tm_fill("other_hit_rate", 
           style="jenks",
-          palette="viridis",
+          palette="-RdGy",
           title="Other Ethnic Group Hit Rate (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
@@ -950,6 +926,65 @@ p <- tmap_arrange(p1, p2, p3, p4)
 p
 
 
+```
+
+### Search rate
+
+```{r}
+p1 <- tm_shape(all_data) + 
+  tm_fill("total_search_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Total Search Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(a)", position=c(0,0.8), size=1)
+
+p2 <- tm_shape(all_data) + 
+  tm_fill("total_arrest_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Total Arrest Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(b)", position=c(0,0.8), size=1)
+
+p3 <- tm_shape(all_data) + 
+  tm_fill("total_hit_rate", 
+          style="jenks",
+          palette="viridis",
+          title="total Hit Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(c)", position=c(0,0.8), size=1)
+
+p4 <- tm_shape(all_data) + 
+  tm_fill("total_crime_rate", 
+          style="jenks",
+          palette="viridis",
+          title="total Crime Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(d)", position=c(0,0.8), size=1)
+
+p <- tmap_arrange(p1, p2, p3, p4)
+p
 ```
 
 ### Search rate & Hit rate comparison
@@ -1124,7 +1159,7 @@ ggsave("output/hit_rate_comparion_plot.png")
 
 ```
 
-### Investigate anomalies
+### 0 Hit rate
 
 ```{r}
 # Examine the zeros in asian hit rate 
@@ -2558,7 +2593,7 @@ regression_data2<- regression_data2 %>%
   mutate(inner_outer=as.factor(inner_outer_london))
 ```
 
-Build model only on S&S and crime rate (R2 = 0.565)
+#### Simple: S&S \~ crime+inner/outer  (R2 = 0.565)
 
 ```{r}
 model_l2 <- lm(search_log ~ crime_log + inner_outer,
@@ -2582,7 +2617,7 @@ model_l3 <- lm(search_log ~ crime_log + inner_outer,
 summary(model_l3) 
 ```
 
-Add more variables to improve R-squ
+#### Multiple: all included 
 
 ```{r}
 # build model 
@@ -2599,12 +2634,12 @@ VIF
 vif(model_mlr)
 ```
 
-Remove mean_income_rate and income_deprivation_rate to avoid Multicolinearity
+#### Multiple: vif proofed
 
 ```{r}
 # build model 
 model_final <- lm(search_log ~ crime_log  + median_income_rate
-                + income_old_deprivation_rate   +  cars_rate,
+                + income_old_deprivation_rate +  cars_rate + inner_outer,
                   data = regression_data2)
 summary(model_final)
 ```
@@ -2650,16 +2685,15 @@ coordsW <- regression_data2%>%
   st_centroid()%>%
   st_geometry()
 
+# KNN method
 knn_wards <-coordsW %>%
   knearneigh(., k=4)
 
 LWard_knn <- knn_wards %>%
   knn2nb()
 
-plot(LWard_knn, st_geometry(coordsW), col="red")
-
 Lward.knn_4_weight <- LWard_knn %>%
-  nb2listw(., style="C")
+  nb2listw(., style="W")
 
 # run moran's I test on the residuals
 Nearest_neighbour <- regression_data2 %>%
@@ -2671,41 +2705,261 @@ Nearest_neighbour <- regression_data2 %>%
 Nearest_neighbour
 ```
 
-Moran's I index is 0.26, showing a moderate spatial autocorrelation on my multiple linear regression residuals. Check the quick plot
+Moran's I index is 0.25, showing a moderate spatial autocorrelation on my multiple linear regression residuals.
 
-```{r}
-tm_shape(regression_data2) +
-  tm_polygons(".resid", 
-              palette = "-RdYlBu")
-```
+#### Lagged models
 
-#### Spatially Lagged models
-
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, results='asis'}
 #run a spatially-lagged regression model
-model_gwr <- lagsarlm(search_log_rate ~ vio_log_rate + econ_inac_rate + 
-                    unemployed_lone_parent_rate + no_qualification_rate + idaopi_index +
-                    log(white_pop) + black_pop + log(asian_pop),
+model_slag_knn <- lagsarlm(search_log ~ crime_log  + median_income_rate
+                + income_old_deprivation_rate + cars_rate + inner_outer,
                   data = regression_data2,
-                  nb2listw(LWard_knn, style="C"), 
+                  nb2listw(LWard_knn, style="W"), 
                   method = "eigen")
 
-summary(model_gwr)
+summary(model_slag_knn)
+tidy(model_slag_knn) %>% kable()
 ```
 
-```{r message=FALSE, warning=FALSE}
-glance(model_gwr)
-```
-
-#### Spatial Error Model
+Check the residuals, should not have spatial autocorrelation
 
 ```{r warning=FALSE}
-model_sem <- errorsarlm(search_log_rate ~ vio_log_rate + econ_inac_rate + 
-                    unemployed_lone_parent_rate + no_qualification_rate + idaopi_index +
-                    log(white_pop) + black_pop + log(asian_pop),
+regression_data2 <- regression_data2 %>%
+  mutate(model_slag_knn_resids = residuals(model_slag_knn))
+
+regression_data2 %>%
+  st_drop_geometry()%>%
+  dplyr::select(model_slag_knn_resids)%>%
+  pull()%>%
+  moran.test(., Lward.knn_4_weight)
+```
+
+#### Error Model
+
+```{r warning=FALSE, results='asis'}
+model_sem <- errorsarlm(search_log ~ crime_log  + median_income_rate
+                + income_old_deprivation_rate +  cars_rate + inner_outer,
                   data = regression_data2,
-                  nb2listw(LWard_knn, style="C"), 
+                  nb2listw(LWard_knn, style="W"), 
                   method = "eigen")
 
 summary(model_sem)
+tidy(model_sem) %>% kable()
+```
+
+##### Lagrange multiple tests
+
+LMerr: for spatially error model
+
+LMlag: for spatially lagged model
+
+```{r}
+library(spdep)
+
+lm.LMtests(model_final, Lward.knn_4_weight, test = c("LMerr","LMlag","RLMerr","RLMlag","SARMA"))
+```
+
+#### GWR
+
+```{r}
+regression_data2 <- regression_data2 %>%
+  mutate(model_final_res = residuals(model_final))
+
+par(mfrow=c(2,2))
+plot(model_final)
+```
+
+```{r}
+tm_shape(regression_data2) +
+  tm_polygons("model_final_res", 
+              palette = "-RdYlBu")
+```
+
+```{r}
+regression_data2 %>%
+  st_drop_geometry()%>%
+  dplyr::select(model_final_res)%>%
+  pull()%>%
+  moran.test(., Lward.knn_4_weight)
+```
+
+Convert to sp object
+
+```{r message=F, warning=F}
+library(spgwr)
+
+st_crs(regression_data2) = 27700
+
+regression_data2_SP <- regression_data2 %>%
+  as(., "Spatial")
+
+st_crs(coordsW) = 27700
+coordsWSP <- coordsW %>%
+  as(., "Spatial")
+
+coordsWSP
+```
+
+```{r}
+#calculate kernel bandwidth
+GWRbandwidth <- gwr.sel(search_log ~ crime_log  + median_income_rate
+                + income_old_deprivation_rate +  cars_rate + inner_outer,
+                  data = regression_data2_SP,
+                        coords=coordsWSP,
+                        adapt=T)
+```
+
+run the model
+
+```{r}
+#run the gwr model
+model_gwr = gwr(search_log ~ crime_log  + median_income_rate
+                + income_old_deprivation_rate +  cars_rate + inner_outer,
+                  data = regression_data2_SP, 
+                coords=coordsWSP, 
+                adapt=GWRbandwidth, 
+                hatmatrix=TRUE, 
+                se.fit=TRUE)
+
+#print the results of the model
+model_gwr
+```
+
+Attach coefficients to our dataframe
+
+```{r}
+results <- as.data.frame(model_gwr$SDF)
+names(results)
+```
+
+```{r}
+regression_data2 <- regression_data2 %>%
+  mutate(coef_CrimeLog = results$crime_log,
+         coef_meadianIncome = results$median_income_rate,
+         coef_oldDeprivation = results$income_old_deprivation_rate,
+         coef_cars = results$cars_rate,
+         coef_inner_outerInner = results$inner_outerInner.London)
+```
+
+#### se-crime 
+
+```{r}
+tm_shape(regression_data2) +
+  tm_polygons(col = "coef_CrimeLog", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+```
+
+From the above map, for 1% increase in crime rate, the resulting S&S rate can increase from 0.6% to 1.8%, showing some boroughs' stop and searches are more sensitive to increase in crime rate.
+
+Of course, these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
+
+```{r}
+#run the significance test
+sigTest_crime = abs(model_gwr$SDF$"crime_log") - (2* model_gwr$SDF$"crime_log_se")
+
+#store significance results
+regression_data2 <- regression_data2 %>%
+  mutate(se_crimeLog = sigTest_crime)
+
+# map the standard errors
+tm_shape(regression_data2) +
+  tm_polygons(col = "se_crimeLog", 
+              palette = "-RdYlBu")
+```
+
+#### se-median income 
+
+```{r}
+tm_shape(regression_data2) +
+  tm_polygons(col = "coef_meadianIncome", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+```
+
+```{r}
+#run the significance test
+sigTest_income = abs(model_gwr$SDF$"median_income_rate") - (2* model_gwr$SDF$"median_income_rate_se")
+
+#store significance results
+regression_data2 <- regression_data2 %>%
+  mutate(se_medianIncome = sigTest_income)
+
+# map the standard errors
+tm_shape(regression_data2) +
+  tm_polygons(col = "se_medianIncome", 
+              palette = "-RdYlBu")
+```
+
+#### se-deprivation
+
+```{r}
+tm_shape(regression_data2) +
+  tm_polygons(col = "coef_oldDeprivation", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+```
+
+```{r}
+#run the significance test
+sigTest_deprivation = abs(model_gwr$SDF$"income_old_deprivation_rate") - (2* model_gwr$SDF$"income_old_deprivation_rate_se")
+
+#store significance results
+regression_data2 <- regression_data2 %>%
+  mutate(se_deprivation = sigTest_deprivation)
+
+# map the standard errors
+tm_shape(regression_data2) +
+  tm_polygons(col = "se_deprivation", 
+              palette = "-RdYlBu")
+```
+
+#### cars
+
+```{r}
+tm_shape(regression_data2) +
+  tm_polygons(col = "coef_cars", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+```
+
+```{r}
+#run the significance test
+sigTest_cars = abs(model_gwr$SDF$"cars_rate") - (2* model_gwr$SDF$"cars_rate_se")
+
+#store significance results
+regression_data2 <- regression_data2 %>%
+  mutate(se_cars = sigTest_cars)
+
+# map the standard errors
+tm_shape(regression_data2) +
+  tm_polygons(col = "se_cars", 
+              palette = "-RdYlBu")
+```
+
+     [9] "crime_log_se"                       "median_income_rate_se"             
+    [11] "income_old_deprivation_rate_se"     "cars_rate_se"                      
+    [13] "inner_outerInner.London_se"
+
+#### Inner outer london
+
+```{r}
+tm_shape(regression_data2) +
+  tm_polygons(col = "coef_inner_outerInner", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+```
+
+```{r}
+#run the significance test
+sigTest_innerOuter = abs(model_gwr$SDF$"inner_outerInner.London") - (2* model_gwr$SDF$"inner_outerInner.London_se")
+
+#store significance results
+regression_data2 <- regression_data2 %>%
+  mutate(se_innerOuter = sigTest_innerOuter)
+
+# map the standard errors
+tm_shape(regression_data2) +
+  tm_polygons(col = "se_innerOuter", 
+              palette = "-RdYlBu")
 ```
