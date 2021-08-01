@@ -35,6 +35,7 @@ library(ggplot2)
 library(ggpubr)
 library(factoextra) 
 library(knitr)
+library(lubridate)
 ```
 
 ## Understand London Crime in general
@@ -235,11 +236,11 @@ left_join(ssRaceTab, arrestRaceTab, by=c("legislation", "officer_defined_ethnici
 ### Trend?
 
 ```{r}
-# ss_london %>%
-#   count(year = year(date), officer_defined_ethnicity) %>%
-#   ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
-#   geom_point() +
-#   geom_line()
+ss_london %>%
+  count(year = year(date), officer_defined_ethnicity) %>%
+  ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
+  geom_point() +
+  geom_line() 
 ```
 
 ## Borough Clustering
@@ -2593,7 +2594,7 @@ regression_data2<- regression_data2 %>%
   mutate(inner_outer=as.factor(inner_outer_london))
 ```
 
-#### Simple: S&S \~ crime+inner/outer  (R2 = 0.565)
+#### Simple: S&S \~ crime+inner/outer (R2 = 0.565)
 
 ```{r}
 model_l2 <- lm(search_log ~ crime_log + inner_outer,
@@ -2617,7 +2618,7 @@ model_l3 <- lm(search_log ~ crime_log + inner_outer,
 summary(model_l3) 
 ```
 
-#### Multiple: all included 
+#### Multiple: all included
 
 ```{r}
 # build model 
@@ -2841,7 +2842,7 @@ regression_data2 <- regression_data2 %>%
          coef_inner_outerInner = results$inner_outerInner.London)
 ```
 
-#### se-crime 
+#### se-crime
 
 ```{r}
 tm_shape(regression_data2) +
@@ -2868,7 +2869,7 @@ tm_shape(regression_data2) +
               palette = "-RdYlBu")
 ```
 
-#### se-median income 
+#### se-median income
 
 ```{r}
 tm_shape(regression_data2) +
