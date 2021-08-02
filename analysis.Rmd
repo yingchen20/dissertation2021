@@ -341,14 +341,32 @@ Show the stats table what objects are commonly searched in each borough
 merged_boro %>% 
   dplyr::select(boro_name,
                 inner_outer,
-                ss_rate,
-                arrest_rate,
                 hit_rate,
+                crime_rate,
+                major_crime_type,
+                major_crime_prop,
                object_of_search,
                object_search_prop) %>% 
   arrange(desc(object_search_prop)) %>% 
   kable()
 
+```
+
+add plot
+
+```{r}
+plotData <- merged_boro %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(boro_name,
+                hit_rate,
+                crime_rate) %>%
+  pivot_longer(cols = (hit_rate |crime_rate),
+               names_to = "names",
+               values_to = "rates")
+
+ggplot(plotData, aes(x=boro_name, y=rates, group=names)) +
+  geom_line(aes(color=names)) +
+  geom_point(aes(color=names))
 ```
 
 The hit rate is very inconsistent across boroughs
@@ -365,6 +383,65 @@ merged_boro %>%
   summarise_at(vars(ss_rate, arrest_rate, crime_rate, hit_rate),list(~mean(., trim = .2, na.rm=T))) %>% 
   kable()
 
+```
+
+### Borough-level plots
+
+```{r}
+p1 <- tm_shape(merged_boro) + 
+  tm_fill("crime_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Total Crime Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(a)", position=c(0,0.8), size=1)
+
+p2 <- tm_shape(merged_boro) + 
+  tm_fill("ss_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Total Search Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(b)", position=c(0,0.8), size=1)
+
+p3 <- tm_shape(merged_boro) + 
+  tm_fill("arrest_rate", 
+          style="jenks",
+          palette="viridis",
+          title="total Arrest Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(c)", position=c(0,0.8), size=1)
+
+p4 <- tm_shape(merged_boro) + 
+  tm_fill("hit_rate", 
+          style="jenks",
+          palette="viridis",
+          title="total Hit Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(d)", position=c(0,0.8), size=1)
+
+p <- tmap_arrange(p1, p2, p3, p4)
+p
 ```
 
 Prepare data for clustering
@@ -504,6 +581,7 @@ cluster_map <- tm_shape(merged_boro) +
   tm_scale_bar(position = c("left", "bottom")) 
 
 tmap_save(cluster_map, "output/cluster_map.png",outer.margins = 0.2,dpi=500)
+cluster_map
 ```
 
 ## MSOA Spatial Autocorrelation
@@ -703,59 +781,37 @@ left_join(HR1, HR2) %>%
 
 ```
 
-### Hit rate
-
 ```{r}
-summary(all_data$black_hit_rate)
-sd(all_data$black_hit_rate, na.rm=TRUE)
-summary(all_data$white_hit_rate)
-summary(all_data$asian_hit_rate)
-summary(all_data$other_hit_rate)
+# overall
+summary(all_data$total_crime_rate)
+summary(all_data$total_search_rate)
+summary(all_data$total_arrest_rate)
+summary(all_data$total_hit_rate)
 ```
 
 ```{r}
-all_data_plot <- all_data %>% 
-  dplyr::select(black_search_rate,
-                white_search_rate,
-                asian_search_rate,
-                other_search_rate,
-                black_hit_rate,
-                white_hit_rate,
-                asian_hit_rate,
-                other_hit_rate,
-                black_arrest_rate,
-                white_arrest_rate,
-                asian_arrest_rate,
-                other_arrest_rate) %>% 
-  mutate(black_hit_compare = case_when(
-    (black_hit_rate < 10.09) ~ "Very Low",
-    (black_hit_rate >= 10.09 & black_hit_rate < 12.4) ~ "Low",
-    (black_hit_rate >= 12.4 & black_hit_rate < 16.13) ~ "High", 
-    (black_hit_rate >= 16.13 ~ "Very High")),
-    white_hit_compare = case_when(
-    (white_hit_rate < 10.14) ~ "Very Low",
-    (white_hit_rate >= 10.14 & white_hit_rate < 12.6) ~ "Low",
-    (white_hit_rate >= 12.6 & white_hit_rate < 16.56) ~ "High", 
-    (white_hit_rate >= 16.56 ~ "Very High")),
-    asian_hit_compare = case_when(
-    (asian_hit_rate < 7.275) ~ "Very Low",
-    (asian_hit_rate >= 7.275 & asian_hit_rate < 9.4) ~ "Low",
-    (asian_hit_rate >= 9.4 & asian_hit_rate < 13.64) ~ "High", 
-    (asian_hit_rate >= 13.64 ~ "Very High")),
-    other_hit_compare = case_when(
-    (other_hit_rate < 9.09) ~ "Very Low",
-    (other_hit_rate >= 9.09 & other_hit_rate < 10.7) ~ "Low",
-    (other_hit_rate >= 10.7 & other_hit_rate < 20) ~ "High", 
-    (other_hit_rate >= 20 ~ "Very High")))
-```
+totalPlot <- all_data %>% 
+  dplyr::select(total_crime_rate,
+                total_search_rate,
+                total_arrest_rate,
+                total_hit_rate) %>% 
+  mutate(crimeCom = case_when(
+    (total_crime_rate >= 23.43) ~ "Above London Average",
+    TRUE ~ "Below London Average"),
+    searchCom = case_when(
+      (total_search_rate >= 6.418) ~ "Above London Average",
+      TRUE ~ "Below London Average"),
+    arrestCom = case_when(
+      (total_arrest_rate >= 0.7682) ~ "Above London Average",
+      TRUE ~ "Below London Average"),
+    hitCom = case_when(
+      (total_hit_rate >= 12.79) ~ "Above London Average",
+      TRUE ~ "Below London Average"))
 
-Plot
-
-```{r}
-p1 <- tm_shape(all_data_plot) + 
-  tm_fill("black_hit_compare", 
-          palette="viridis",
-          title="Black Hit Rate Comparison")+
+tp1 <- tm_shape(totalPlot) + 
+  tm_fill("crimeCom", 
+          palette="RdGy",
+          title= "Crime Comparison")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
@@ -764,55 +820,10 @@ p1 <- tm_shape(all_data_plot) +
             legend.position = c(.8,0)) +
   tm_credits("(a)", position=c(0,0.8), size=1)
 
-p2 <- tm_shape(all_data_plot) + 
-  tm_fill("white_hit_compare", 
-          palette="viridis",
-          title="White Hit Rate Comparison")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(b)", position=c(0,0.8), size=1)
-
-p3 <- tm_shape(all_data_plot) + 
-  tm_fill("asian_hit_compare", 
-          palette="viridis",
-          title="Asian Hit Rate Comparison")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(c)", position=c(0,0.8), size=1)
-
-p4 <- tm_shape(all_data_plot) + 
-  tm_fill("other_hit_compare", 
-          palette="viridis",
-          title="Other Ethnic Group Hit Rate Comparison")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(d)", position=c(0,0.8), size=1)
-
-
-p <- tmap_arrange(p1, p2, p3, p4)
-p
-
-
-```
-
-```{r}
-p1 <- tm_shape(all_data_plot) + 
-  tm_fill("black_hit_rate", 
-          style="jenks",
-          palette="plasma",
-          title="Black Hit Rate (Jenks)")+
+tp2 <- tm_shape(totalPlot) + 
+  tm_fill("searchCom", 
+          palette="RdGy",
+          title="Search Comparison")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
@@ -821,60 +832,10 @@ p1 <- tm_shape(all_data_plot) +
             legend.position = c(.8,0)) +
   tm_credits("(a)", position=c(0,0.8), size=1)
 
-p2 <- tm_shape(all_data_plot) + 
-  tm_fill("white_hit_rate", 
-          style="jenks",
-          palette="Set2",
-          title="White Hit Rate (Jenks)")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(b)", position=c(0,0.8), size=1)
-
-p3 <- tm_shape(all_data_plot) + 
-  tm_fill("asian_hit_rate", 
-          style="jenks",
-          palette="Set1",
-          title="Asian Hit Rate (Jenks)")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(c)", position=c(0,0.8), size=1)
-
-p4 <- tm_shape(all_data_plot) + 
-  tm_fill("other_hit_rate", 
-          style="jenks",
-          palette="-RdGy",
-          title="Other Ethnic Group Hit Rate (Jenks)")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(d)", position=c(0,0.8), size=1)
-
-
-p <- tmap_arrange(p1, p2, p3, p4)
-p
-
-
-```
-
-Standard Deviation classification
-
-```{r}
-p1 <- tm_shape(all_data_plot) + 
-  tm_fill("black_hit_rate", 
-          style="sd",
-          palette="viridis",
-          title="Black Hit Rate (Std Dev)")+
+tp3 <- tm_shape(totalPlot) + 
+  tm_fill("arrestCom", 
+          palette="RdGy",
+          title="Arrest Comparison")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
@@ -883,53 +844,23 @@ p1 <- tm_shape(all_data_plot) +
             legend.position = c(.8,0)) +
   tm_credits("(a)", position=c(0,0.8), size=1)
 
-p2 <- tm_shape(all_data_plot) + 
-  tm_fill("white_hit_rate", 
-          style="sd",
-          palette="viridis",
-          title="White Hit Rate (Std Dev)")+
+tp4 <- tm_shape(totalPlot) + 
+  tm_fill("hitCom", 
+          palette="RdGy",
+          title="Hit Comparison")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0)) +
-  tm_credits("(b)", position=c(0,0.8), size=1)
+  tm_credits("(a)", position=c(0,0.8), size=1)
 
-p3 <- tm_shape(all_data_plot) + 
-  tm_fill("asian_hit_rate", 
-          style="sd",
-          palette="viridis",
-          title="Asian Hit Rate (Std Dev)")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(c)", position=c(0,0.8), size=1)
-
-p4 <- tm_shape(all_data_plot) + 
-  tm_fill("other_hit_rate", 
-          style="sd",
-          palette="viridis",
-          title="Other Ethnic Group Hit Rate (Std Dev)")+
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(d)", position=c(0,0.8), size=1)
-
-
-p <- tmap_arrange(p1, p2, p3, p4)
-p
-
+tmap_arrange(tp1, tp2, tp3, tp4)
 
 ```
 
-### Search rate
+all variables comparison
 
 ```{r}
 p1 <- tm_shape(all_data) + 
@@ -988,7 +919,7 @@ p <- tmap_arrange(p1, p2, p3, p4)
 p
 ```
 
-### Search rate & Hit rate comparison
+### Ethical Hit rate
 
 ```{r message=FALSE, warning=FALSE}
 # select columns we need but first change the msoa code name 
@@ -1158,6 +1089,75 @@ hit_rate_plot <- main_data_white %>%
 
 ggsave("output/hit_rate_comparion_plot.png")
 
+hit_rate_plot
+```
+
+### Map hit rate
+
+```{r}
+# ethical groups
+summary(all_data$black_hit_rate)
+summary(all_data$white_hit_rate)
+summary(all_data$asian_hit_rate)
+summary(all_data$other_hit_rate)
+```
+
+```{r}
+p1 <- tm_shape(all_data_plot) + 
+  tm_fill("black_hit_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Black Hit Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(a)", position=c(0,0.8), size=1)
+
+p2 <- tm_shape(all_data_plot) + 
+  tm_fill("white_hit_rate", 
+          style="jenks",
+          palette="viridis",
+          title="White Hit Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(b)", position=c(0,0.8), size=1)
+
+p3 <- tm_shape(all_data_plot) + 
+  tm_fill("asian_hit_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Asian Hit Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(c)", position=c(0,0.8), size=1)
+
+p4 <- tm_shape(all_data_plot) + 
+  tm_fill("other_hit_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Other Ethnic Group Hit Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(d)", position=c(0,0.8), size=1)
+
+
+p <- tmap_arrange(p1, p2, p3, p4)
+p
 ```
 
 ### 0 Hit rate
@@ -1616,7 +1616,7 @@ MoranColours<- rev(brewer.pal(3, "BrBG"))
 
 t1 <- tm_shape(all_rates) + 
   tm_fill("quad_sig_black_search",
-        palette= MoranColours,
+        palette= "RdGy",
         midpoint=NA,
         title="LISA, Black Searches") +
   tm_borders(NA, alpha = 0.3) +
@@ -1629,14 +1629,13 @@ t1 <- tm_shape(all_rates) +
             legend.position = c(.8,0)) +
   tm_credits("(a)", position=c(0,0.8), size=1)
 
-
 t2 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_black_arrest",
-        palette= MoranColours,
+  tm_polygons("quad_sig_white_search",
+        palette= "RdGy",
         midpoint=NA,
-        title="LISA, Black Arrests") +
+        title="LISA, White Searches") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,
+  tm_layout(frame=FALSE,            
             legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
@@ -1645,10 +1644,10 @@ t2 <- tm_shape(all_rates) +
   tm_credits("(b)", position=c(0,0.8), size=1)
 
 t3 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_white_search",
-        palette= MoranColours,
+  tm_polygons("quad_sig_asian_search",
+        palette= "RdGy",
         midpoint=NA,
-        title="LISA, White Searches") +
+        title="LISA, Asian Searches") +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
@@ -1659,12 +1658,12 @@ t3 <- tm_shape(all_rates) +
   tm_credits("(c)", position=c(0,0.8), size=1)
 
 t4 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_white_arrest",
-        palette= MoranColours,
+  tm_polygons("quad_sig_black_arrest",
+        palette= "RdGy",
         midpoint=NA,
-        title="LISA, White Arrests") +
+        title="LISA, Black Arrests") +
   tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
+  tm_layout(frame=FALSE,
             legend.outside.size = 1,
             legend.title.size = 0.5,
             legend.text.size = 0.3,
@@ -1672,11 +1671,12 @@ t4 <- tm_shape(all_rates) +
             legend.position = c(.8,0))+
   tm_credits("(d)", position=c(0,0.8), size=1)
 
+
 t5 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_asian_search",
-        palette= MoranColours,
+  tm_polygons("quad_sig_white_arrest",
+        palette= "RdGy",
         midpoint=NA,
-        title="LISA, Asian Searches") +
+        title="LISA, White Arrests") +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
@@ -1688,7 +1688,7 @@ t5 <- tm_shape(all_rates) +
 
 t6 <- tm_shape(all_rates) + 
   tm_polygons("quad_sig_asian_arrest",
-        palette= MoranColours,
+        palette= "RdGy",
         midpoint=NA,
         title="LISA, Asian Arrests") +
   tm_legend(show=T)+
@@ -1702,7 +1702,7 @@ t6 <- tm_shape(all_rates) +
 
 t7 <- tm_shape(all_rates) + 
   tm_polygons("quad_sig_total_crime",
-        palette= MoranColours,
+        palette= "RdGy",
         midpoint=NA,
         title="LISA, Total Crimes") +
   tm_legend(show=T)+
@@ -1716,8 +1716,8 @@ t7 <- tm_shape(all_rates) +
 
 
 
-t=tmap_arrange(t1, t3, t5, t2, t4, t6, t7,
-               nrow = 3, ncol = 3)
+t=tmap_arrange(t1, t2, t3, t4, t5, t6,
+               nrow = 2, ncol = 3)
 t
 ```
 
@@ -1728,164 +1728,6 @@ So how do we interpret these results? Well keep in mind:
 -   Whether or not this value is statistically significant is assessed by comparing the actual value to the value calculated for the same location by randomly reassigning the data among all the areal units and recalculating the values each time (the Monte Carlo simulation approach discussed earlier).
 
 So essentially this map now tells us that there was statistically significant moderate clustering in burglaries in Manchester. When reporting your results, report at least the Moran's I test value and the p value. So, for this test, you should report Moran's I = 0.32, p \< .001. Including the LISA cluster map is also a great way of showing how the attribute is actually clustering.
-
-```{r}
-breaks1<-c(-1000,-2.58,-1.96,-1.65,1.65,1.96,2.58,1000)
-MoranColours<- rev(brewer.pal(8, "RdGy"))
-
-
-t1 <- tm_shape(all_rates) + 
-  tm_polygons("black_search_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, Black Search Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,            
-            legend.outside = FALSE,
-            legend.position = c(.8,0)) +
-  tm_credits("(a)", position=c(0,0.8), size=1)
-
-
-t2 <- tm_shape(all_rates) + 
-  tm_polygons("white_search_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, White Search Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(b)", position=c(0,0.8), size=1)
-
-t3 <- tm_shape(all_rates) + 
-  tm_polygons("asian_search_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, Asian Search Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(c)", position=c(0,0.8), size=1)
-
-t4 <- tm_shape(all_rates) + 
-  tm_polygons("black_hit_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, Black Hit Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(d)", position=c(0,0.8), size=1)
-
-t5 <- tm_shape(all_rates) + 
-  tm_polygons("white_hit_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, White Hit Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(e)", position=c(0,0.8), size=1)
-
-t6 <- tm_shape(all_rates) + 
-  tm_polygons("asian_hit_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, Asian Hit Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(f)", position=c(0,0.8), size=1)
-
-t7 <- tm_shape(all_rates) + 
-  tm_polygons("black_arrest_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, Black Arrest Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(g)", position=c(0,0.8), size=1)
-
-
-t8 <- tm_shape(all_rates) + 
-  tm_polygons("white_arrest_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, White Arrest Rate ") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(h)", position=c(0,0.8), size=1)
-
-t9 <- tm_shape(all_rates) + 
-  tm_polygons("asian_arrest_Iz",
-        style="fixed",
-        breaks=breaks1,
-        palette= "viridis",
-        midpoint=NA,
-        title="Local Moran's I, Asian Arrest Rate") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(i)", position=c(0,0.8), size=1)
-
-t=tmap_arrange(t1, t2, t3, t7, t8, t9, t4, t5, t6,
-               nrow = 3,
-               ncol = 3)
-
-t
-```
 
 ## Regression Models
 
@@ -2047,6 +1889,21 @@ regression_data <- all_data %>%
 # convert NAs to zero
 regression_data[is.na(regression_data)] <- 0
 
+# add inner outer 
+innerOuter <- left_join(msoaMap %>% dplyr::select(MSOA11CD, LAD11CD),
+                        boroData %>% dplyr::select(code,inner_outer_london),
+                        by = c("LAD11CD" = "code"))
+regression_data <- left_join(regression_data,innerOuter,
+                              by = c("msoa_code" = "MSOA11CD"))
+
+# change to a factor
+regression_data<- regression_data %>%
+  mutate(inner_outer=as.factor(inner_outer_london))
+# change reference group to outer london
+regression_data <- regression_data %>%
+  mutate(inner_outer = relevel(inner_outer, 
+                               ref="Outer London"))
+
 # check variables' histogram 
 ggplot(regression_data, aes(x=total_search_rate))+ 
   geom_histogram(aes(y = ..density..),
@@ -2078,20 +1935,19 @@ Assumption 2: the residuals in my model should be normally distributed
 ```{r message=FALSE, warning=FALSE}
 # compute linear regression model
 model_lr <- regression_data %>%
-  lm(total_arrest_rate ~ total_search_rate, data=.)
+  lm(total_arrest_rate ~ total_search_rate + inner_outer, data=.)
 
 # summary stats
-# tidy(model1)
-# glance(model1)
 summary(model_lr)
 
 # append residuals to regression_data 
 regression_data <- model_lr %>%
-  augment(., regression_data)
+  augment(., regression_data) %>% 
+  rename(lr_resid = ".resid")
 
 #plot residuals
 regression_data%>%
-  dplyr::select(.resid)%>%
+  dplyr::select(lr_resid)%>%
   pull()%>%
   qplot()+ 
   geom_histogram()
@@ -2111,14 +1967,26 @@ The predicted function is:
 
 y = 0.069 + 0.109 ss60 (R 0.935) meaning for 1 increase in stop and search for every thousand of population, the model suggests the arrest count is expected to increase 0.0424. In order words, on average, for every 1k stop and search in London, we are expected to have 42 arrests.
 
+Plot equation back to the scatter plot
+
+```{r}
+Lfun <- function(xvar) {
+ (0.069 + 0.109*xvar)
+}
+
+# plot
+ggplot(regression_data,
+       aes(y=total_arrest_rate,
+           x=total_search_rate)) +
+  geom_point() +
+  stat_function(fun = Lfun, geom = "line", col="red") +
+  geom_label(x=Inf, y = Inf, 
+           label = "y = 0.069 + 0.109*x \n R-sqr = 0.935", vjust=3, hjust=1, col="red")
+```
+
 Assumption 3: errors/residuals in the model exhibit constant / homogeneous variance
 
 -- The first and third plot shows some clustering pattern and the red line is not straight suggesting some hetroscedasticity, perhaps because there are many wards with zero arrest rate or search rate.
-
-```{r}
-par(mfrow=c(2,2))    #plot to 2 by 2 array
-plot(model_lr)
-```
 
 Assumption 4: independent of errors, look for spatial autocorrelation
 
@@ -2144,7 +2012,7 @@ Lward_lw <- Lward_nb %>%
   nb2listw(., style="C")
 
 regression_data %>% 
-    pull(.resid) %>% 
+    pull(lr_resid) %>% 
     as.vector() %>% 
     moran.test(., Lward_lw, zero.policy = TRUE)
 
@@ -2152,153 +2020,135 @@ regression_data %>%
 
 Moderate spatial autocorrelation.
 
-y = 0.069 + 0.109 ss60 (R 0.935)
-
-Plot equation back to the scatter plot
-
 ```{r}
-Lfun <- function(xvar) {
- (0.069 + 0.109*xvar)
-}
-
-# plot
-ggplot(regression_data,
-       aes(y=total_arrest_rate,
-           x=total_search_rate)) +
-  geom_point() +
-  stat_function(fun = Lfun, geom = "line", col="red") +
-  geom_label(x=Inf, y = Inf, 
-           label = "y = 0.069 + 0.109*x \n R-sqr = 0.935", vjust=3, hjust=1, col="red")
+tm_shape(regression_data) +
+  tm_polygons("lr_resid", 
+              palette = "-RdYlBu")
 ```
 
-#### Poisson regression
+Convert to sp object
 
-Assumptions (<https://bookdown.org/roback/bookdown-BeyondMLR/ch-poissonreg.html>)
+```{r message=F, warning=F}
+library(spgwr)
 
-1.  **Poisson Response** The response variable is a count per unit of time or space, described by a Poisson distribution.
+st_crs(regression_data) = 27700
 
-2.  **Independence** The observations must be independent of one another.
+regression_data_SP <- regression_data %>%
+  as(., "Spatial")
 
-3.  **Mean=Variance** By definition, the mean of a Poisson random variable must be equal to its variance.
+st_crs(coordsM) = 27700
 
-4.  **Linearity** The log of the mean rate, log(λ), must be a linear function of x.
+coordsMSP <- coordsM %>%
+  as(., "Spatial")
 
-First checking the histogram and scatter plot of the original data
-
-```{r}
-ggplot(regression_data, aes(x=total_ss))+ 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 5) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-
-ggplot(regression_data, aes(x=total_arrest))+ 
-  geom_histogram(aes(y = ..density..),
-                 binwidth = 1) + 
-  geom_density(colour="red", 
-               size=1, 
-               adjust=1)
-
-qplot(x = total_ss, 
-      y = total_arrest,
-      data = regression_data) +
-stat_smooth(method="glm", se=FALSE, size=1) + 
-  geom_jitter()
+coordsMSP
 ```
 
-Both histogram reveal the pattern often found with distributions of counts of rare events. Many wards have few or none ss60 and arrests and a few wards have a large number of ss60 or arrests making for a distribution that appears to be far from normal. Therefore, Poisson regression should be used to model our data.
-
-Next, checking mean and variance, they should be equal if they follow Poisson distribution.
-
 ```{r}
-mean(regression_data$total_arrest)
-var(regression_data$total_arrest)
+#calculate kernel bandwidth
+GWRbandwidth <- gwr.sel(total_arrest_rate ~ total_search_rate + inner_outer,
+                  data = regression_data_SP,
+                        coords=coordsMSP,
+                        adapt=T)
 ```
 
-The variance is slightly larger than the mean so should not be a big problem.
-
-While a Poisson regression model is a good first choice because the responses are counts per period of time (from April 2019 to April 2021), it is important to note that the counts are not directly comparable because they come from different size wards. This issue sometimes is referred to as the need to account for *sampling effort*; in other words, we expect wards with more population to have more reports of arrests since there are more people who could be affected. We can take the differences in ward population into account by including an **offset** in our model.
+run the model
 
 ```{r}
-library(stats)
-model_pr <- glm(total_arrest ~ total_ss, 
-              family = "poisson", 
-              offset = log(all_population),
-              data = regression_data)
-summary(model_pr)
+#run the gwr model
+model_gwr1 = gwr(total_arrest_rate ~ total_search_rate + inner_outer,
+                  data = regression_data_SP, 
+                coords=coordsMSP, 
+                adapt=GWRbandwidth, 
+                hatmatrix=TRUE, 
+                se.fit=TRUE)
+
+#print the results of the model
+model_gwr1
 ```
 
-The standard Poisson regression model gives us,
-
-log(λ) = -2.89 + 0.008 ss60,
-
-by exponentiating the coefficient of ss60 we obtain the multiplicative factor by which the mean count changes. In this case, the mean number of S&S (s60) arrests changes by a factor of e\^0.008=1.01 or increases by 0.01 % (since 1.01-1=0.01) with each additional stop and search for violating section 60. 1.01 is referred to as a **rate ratio** or **relative risk**.
-
-We can use standard error to construct a confidence interval for β1. A 95% CI provides a range of plausible values for the ss60 coefficient and can be constructed by using "sandwich" library based on work done by Cameron and Trivedi (2009). <https://stats.idre.ucla.edu/r/dae/poisson-regression/>
+Attach coefficients to our dataframe
 
 ```{r}
-library(sandwich)
-cov.mdl2 <- vcovHC(model_pr, type="HC0")
-std.err <- sqrt(diag(cov.mdl2))
-r.est <- cbind(Estimate= coef(model_pr), "Robust SE" = std.err,
-"Pr(>|z|)" = 2 * pnorm(abs(coef(model_pr)/std.err), lower.tail=FALSE),
-LL = coef(model_pr) - 1.96 * std.err,
-UL = coef(model_pr) + 1.96 * std.err)
-r.est
+results <- as.data.frame(model_gwr1$SDF)
+names(results)
 ```
-
-Exponentiating the endpoints yields a confidence interval for the relative risk; i.e., the percent change in arrest counts for each additional percent increase in ss60.
-
-( e^0.006513633^ , e^0.009542442^ ) = (1.00653 , 1.00959) suggesting that we are 95% confident that the mean number in the arrest increase between 0.65% and 0.96% for each additional stop and search for section 60. The interval does not include 1 so we can conclude stop and search is significantly associated with arrests.
-
-Deviance is a way in which to measure how the observed data deviates from the model predictions, similar to sum of squared errors in linear regression. Because we want models that minimize deviance, we calculate the drop-in-deviance when adding age to the model with no covariates (the null model).
-
-The deviances for the null model and the model with age can be found in the model output. A residual deviance for the model with ss60 is reported as 1143.1 with 623 df. The output also includes the deviance and degrees of freedom for the null model (1879.7 with 624 df). The drop-in-deviance is 736.6 (1879.7-1143.1) with a difference of only 1 df, so that the addition of one extra term (ss60) reduced unexplained variability by 736.6.
-
-If the null model were true, we would expect the drop-in-deviance to follow a χ2 distribution with 1 df. Therefore, the p-value for comparing the null model to the model with ss60 is found by determining the probability that the value for a χ2 random variable with one degree of freedom exceeds 736.6, which is essentially 0. Once again, we can conclude that we have statistically significant evidence (χ2 (df=1)=736.6, p\<.001) that average count of arrest increases as stop and search increases.
 
 ```{r}
-# model0 is the null/reduced model
-model0 <- glm(total_arrest ~ 1, family = poisson, offset = log(all_population), 
-              data = regression_data)
-anova(model0, model_pr, test = "Chisq")
+regression_data <- regression_data %>%
+  mutate(coef_search = results$total_search_rate,
+         coef_innerOuter = results$inner_outerInner.London)
 ```
 
-Based on the above, we can see that the p-value \< 0.05, so we reject the null hypothesis that the regression coefficients are all zero. Hence our model is statistically significant.
-
-**Drop-in-deviance test to compare models**
-
--   Compute the deviance for each model, then calculate: drop-in-deviance = residual deviance for reduced model -- residual deviance for the larger model.
-
--   When the reduced model is true, the drop-in-deviance ∼χd2 where d= the difference in the degrees of freedom associated with the two models (that is, the difference in the number of terms/coefficients).
-
--   A large drop-in-deviance favors the larger model.
+#### se-Total search
 
 ```{r}
-rsid <- residuals(model_pr)
-d <- deviance(model_pr)
-par(mfrow=c(2,2))
-plot(regression_data$total_ss, rsid)
-boxplot(rsid~total_ss,xlab="S&S",ylab = "Std residuals",data = regression_data)
-qqnorm(rsid, ylab="Std residuals")
-qqline(rsid,col="blue",lwd=2)
-hist(rsid)
+tm_shape(regression_data) +
+  tm_polygons(col = "coef_search", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+
+tm_shape(regression_data) +
+  tm_polygons(col = "coef_innerOuter", 
+              palette = "-RdBu", 
+              alpha = 0.5)
 ```
 
-We saw residuals are not normally distributed, probably because we have many observations that have certain amount of searches but no arrests, leading to a bad model prediction.
+From the above map, for 1% increase in search rate, the resulting arrest rate can increase from 0.04% to 0.065%, showing some boroughs' stop and searches are more sensitive to increase in crime rate.
 
-**Goodness of fit:**
-
-In order to assess goodness of fit, we will look at the deviance residuals, and apply a χdf2 test based on our n-p-1 degrees of freedom. In this case, our p-value is zero, and so we fail to reject the null hypothesis that the model is not a good fit.
+Of course, these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
 
 ```{r}
-c(deviance(model_pr), 1-pchisq(model_pr$deviance, model_pr$df.residual))  # GOF test
+#run the significance test
+sigTest_search = abs(model_gwr1$SDF$"total_search_rate") - (2* model_gwr1$SDF$"total_search_rate_se")
+
+sigTest_innerOuter = abs(model_gwr1$SDF$"inner_outerInner.London") - (2* model_gwr1$SDF$"inner_outerInner.London_se")
+
+#store significance results
+regression_data <- regression_data %>%
+  mutate(se_search = sigTest_search)
+
+regression_data <- regression_data %>%
+  mutate(se_innerOuter = sigTest_innerOuter)
+
+# map the standard errors
+tm_shape(regression_data) +
+  tm_polygons(col = "se_innerOuter", 
+              palette = "-RdYlBu")
+
+tm_shape(regression_data) +
+  tm_polygons(col = "se_search", 
+              palette = "-RdYlBu")
 ```
 
-The model residual deviance can be used to assess the degree to which the predicted values differ from the observed. When a model is true, we can expect the residual deviance to be distributed as a χ2 random variable with degrees of freedom equal to the model's residual degrees of freedom. Our model has a residual deviance of 1143.1 with 623 df. The probability of observing a deviance this large if the model fits is esentially 0, saying that there is significant evidence of lack-of-fit.
+```{r}
+totalGWR <- subset(regression_data) 
+# replace non-sig to na
+totalGWR$coef_search <- replace(totalGWR$coef_search, 
+                    totalGWR$se_search < 0,
+                    NA) 
 
-There are several reasons why **lack-of-fit** may be observed. (1) We may be missing important covariates or interactions; a more comprehensive data set may be needed. (2) There may be extreme observations that may cause the deviance to be larger than expected; indeed, there are very few places with very high S&S counts and the majority of places with very little S&S. (3) Lastly, there may be a problem with the Poisson model. In particular, the Poisson model has only a single parameter, λ, for each combination of the levels of the predictors which must describe both the mean and the variance. This limitation can become manifest when the variance appears to be larger than the corresponding means. In that case, the response is more variable than the Poisson model would imply, and the response is considered to be **overdispersed**.
+totalGWR$coef_innerOuter <- replace(totalGWR$coef_innerOuter, 
+                    totalGWR$se_innerOuter < 0,
+                    NA) 
+
+totalGWR <- totalGWR %>% 
+  mutate_if(is.numeric, ~round(., 2))
+                                        
+tm_shape(totalGWR) +
+  tm_polygons(col = "coef_search", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+
+tm_shape(totalGWR) +
+  tm_polygons(col = "coef_innerOuter", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+```
 
 #### Black
 
@@ -2328,18 +2178,19 @@ stat_smooth(method="lm", se=FALSE, size=1) +
 ###### assumption2 #####
 # compute linear regression model
 model_b <- regression_data %>% 
-  lm(black_arrest_rate ~ black_search_rate, data=.)
+  lm(black_arrest_rate ~ black_search_rate + inner_outer, data=.)
 
 # summary stats
 summary(model_b)
 
 # append residuals data to regression_data 
 regression_data <- model_b %>%
-  augment(., regression_data)
+  augment(., regression_data) %>% 
+  rename(black_resid = ".resid")
 
 #plot residuals
 regression_data%>%
-  dplyr::select(.resid)%>%
+  dplyr::select(black_resid)%>%
   pull()%>%
   qplot()+ 
   geom_histogram()
@@ -2360,12 +2211,12 @@ plot(model_b)
 
 ###### assumption4 #####
 regression_data %>% 
-    pull(.resid) %>% 
+    pull(black_resid) %>% 
     as.vector() %>% 
     moran.test(., Lward_lw, zero.policy = TRUE)
 ```
 
-y = 0.258 +0.115 black ss
+y = 0.258 + 0.115 black ss + 0.157 inner London
 
 ```{r}
 library(ggplot2)
@@ -2410,18 +2261,19 @@ stat_smooth(method="lm", se=FALSE, size=1) +
 ###### assumption2 #####
 # compute linear regression model
 model_w <- regression_data %>% 
-  lm(white_arrest_rate ~ white_search_rate, data=.)
+  lm(white_arrest_rate ~ white_search_rate + inner_outer, data=.)
 
 # summary stats
 summary(model_w)
 
 # append residuals data to regression_data 
 regression_data <- model_w %>%
-  augment(., regression_data)
+  augment(., regression_data) %>% 
+  rename(white_resid = ".resid")
 
 #plot residuals
 regression_data%>%
-  dplyr::select(.resid)%>%
+  dplyr::select(white_resid)%>%
   pull()%>%
   qplot()+ 
   geom_histogram()
@@ -2442,12 +2294,12 @@ plot(model_w)
 
 ###### assumption4 #####
 regression_data %>% 
-    pull(.resid) %>% 
+    pull(white_resid) %>% 
     as.vector() %>% 
     moran.test(., Lward_lw, zero.policy = TRUE)
 ```
 
-y = 0.106 + 0.102 white ss
+y = 0.106 + 0.102 white ss + 0.0465 inner London
 
 ```{r}
 library(ggplot2)
@@ -2462,6 +2314,114 @@ ggplot(regression_data,
   stat_function(fun = Lfun, geom = "line", col="red") +
   geom_label(x=Inf, y = Inf, 
            label = "y = 0.106 + 0.102*x \n R-sqr = 0.915",vjust=3, hjust=1, col="red")
+```
+
+```{r}
+#calculate kernel bandwidth
+GWRbandwidth <- gwr.sel(white_arrest_rate ~ white_search_rate + inner_outer,
+                  data = regression_data_SP,
+                        coords=coordsMSP,
+                        adapt=T)
+```
+
+run the model
+
+```{r}
+#run the gwr model
+model_gwr2 = gwr(white_arrest_rate ~ white_search_rate + inner_outer,
+                  data = regression_data_SP, 
+                coords=coordsMSP, 
+                adapt=GWRbandwidth, 
+                hatmatrix=TRUE, 
+                se.fit=TRUE)
+
+#print the results of the model
+model_gwr2
+```
+
+Attach coefficients to our dataframe
+
+```{r}
+results <- as.data.frame(model_gwr2$SDF)
+names(results)
+```
+
+```{r}
+regression_data <- regression_data %>%
+  mutate(coef_Whitesearch = results$white_search_rate,
+         coef_Whiteinner = results$inner_outerInner.London)
+```
+
+#### se-White search
+
+```{r}
+regression_data <- regression_data %>% st_as_sf()
+tm_shape(regression_data) +
+  tm_polygons(col = "coef_Whitesearch", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+
+regression_data <- regression_data %>% st_as_sf()
+tm_shape(regression_data) +
+  tm_polygons(col = "coef_Whiteinner", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+```
+
+From the above map, for 1% increase in search rate, the resulting arrest rate can increase from 0.04% to 0.065%, showing some boroughs' stop and searches are more sensitive to increase in crime rate.
+
+Of course, these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
+
+```{r}
+#run the significance test
+sigTest_Whitesearch = abs(model_gwr2$SDF$"white_search_rate") - (2* model_gwr2$SDF$"white_search_rate_se")
+
+sigTest_Whiteinner = abs(model_gwr2$SDF$"inner_outerInner.London") - (2* model_gwr2$SDF$"inner_outerInner.London_se")
+
+
+#store significance results
+regression_data <- regression_data %>%
+  mutate(se_Whitesearch = sigTest_Whitesearch,
+         se_Whiteinner = sigTest_Whiteinner)
+
+# map the standard errors
+tm_shape(regression_data) +
+  tm_polygons(col = "se_Whitesearch", 
+              palette = "-RdYlBu")
+
+tm_shape(regression_data) +
+  tm_polygons(col = "se_Whiteinner", 
+              palette = "-RdYlBu")
+```
+
+final maps
+```{r}
+whiteGWR <- subset(regression_data) 
+# replace non-sig to na
+whiteGWR$coef_Whitesearch <- replace(whiteGWR$coef_Whitesearch, 
+                    whiteGWR$se_Whitesearch < 0,
+                    NA) 
+
+whiteGWR$coef_Whiteinner <- replace(whiteGWR$coef_Whiteinner, 
+                    whiteGWR$se_Whiteinner < 0,
+                    NA) 
+
+whiteGWR <- whiteGWR %>% 
+  mutate_if(is.numeric, ~round(., 2))
+                                        
+tm_shape(whiteGWR) +
+  tm_polygons(col = "coef_Whitesearch", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+
+tm_shape(whiteGWR) +
+  tm_polygons(col = "coef_Whiteinner", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
 ```
 
 #### Asian
@@ -2492,18 +2452,19 @@ stat_smooth(method="lm", se=FALSE, size=1) +
 ###### assumption2 #####
 # compute linear regression model
 model_a <- regression_data %>% 
-  lm(asian_arrest_rate ~ asian_search_rate, data=.)
+  lm(asian_arrest_rate ~ asian_search_rate + inner_outer, data=.)
 
 # summary stats
 summary(model_a)
 
 # append residuals data to regression_data 
 regression_data <- model_a %>%
-  augment(., regression_data)
+  augment(., regression_data) %>% 
+  rename(asian_resid = ".resid")
 
 #plot residuals
 regression_data%>%
-  dplyr::select(.resid)%>%
+  dplyr::select(asian_resid)%>%
   pull()%>%
   qplot()+ 
   geom_histogram()
@@ -2524,12 +2485,12 @@ plot(model_a)
 
 ###### assumption4 #####
 regression_data %>% 
-    pull(.resid) %>% 
+    pull(asian_resid) %>% 
     as.vector() %>% 
     moran.test(., Lward_lw, zero.policy = TRUE)
 ```
 
-y = 0.0126 + 0.0968 asian ss
+y = 0.0126 + 0.0968 asian ss + 0.0421 Inner London
 
 ```{r}
 library(ggplot2)
@@ -2544,6 +2505,114 @@ ggplot(regression_data,
   stat_function(fun = Lfun, geom = "line", col="red") +
   geom_label(x=Inf, y = Inf, 
            label = "y = 0.0126 + 0.0968*x \n R-sqr = 0.741", vjust=3, hjust=1, col="red")
+```
+
+```{r}
+#calculate kernel bandwidth
+GWRbandwidth <- gwr.sel(asian_arrest_rate ~ asian_search_rate + inner_outer,
+                  data = regression_data_SP,
+                        coords=coordsMSP,
+                        adapt=T)
+```
+
+run the model
+
+```{r}
+#run the gwr model
+model_gwr3 = gwr(asian_arrest_rate ~ asian_search_rate + inner_outer,
+                  data = regression_data_SP, 
+                coords=coordsMSP, 
+                adapt=GWRbandwidth, 
+                hatmatrix=TRUE, 
+                se.fit=TRUE)
+
+#print the results of the model
+model_gwr3
+```
+
+Attach coefficients to our dataframe
+
+```{r}
+results <- as.data.frame(model_gwr3$SDF)
+names(results)
+```
+
+```{r}
+regression_data <- regression_data %>%
+  mutate(coef_Asiansearch = results$asian_search_rate,
+         coef_Asianinner = results$inner_outerInner.London)
+```
+
+#### se-Asian search
+
+```{r}
+regression_data <- regression_data %>% st_as_sf()
+tm_shape(regression_data) +
+  tm_polygons(col = "coef_Asiansearch", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+
+tm_shape(regression_data) +
+  tm_polygons(col = "coef_Asianinner", 
+              palette = "-RdBu", 
+              alpha = 0.5)
+
+```
+
+From the above map, for 1% increase in search rate, the resulting arrest rate can increase from 0.04% to 0.065%, showing some boroughs' stop and searches are more sensitive to increase in crime rate.
+
+Of course, these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
+
+```{r}
+#run the significance test
+sigTest_Asiansearch = abs(model_gwr3$SDF$"asian_search_rate") - (2* model_gwr3$SDF$"asian_search_rate_se")
+
+sigTest_Asianinner = abs(model_gwr3$SDF$"inner_outerInner.London") - (2* model_gwr3$SDF$"inner_outerInner.London_se")
+
+#store significance results
+regression_data <- regression_data %>%
+  mutate(se_asiansearch = sigTest_Asiansearch,
+         se_asianinner = sigTest_Asianinner)
+
+# map the standard errors
+tm_shape(regression_data) +
+  tm_polygons(col = "se_asiansearch", 
+              palette = "-RdYlBu")
+
+tm_shape(regression_data) +
+  tm_polygons(col = "se_asianinner", 
+              palette = "-RdYlBu")
+```
+
+filter out not-significally important areas
+
+```{r}
+asianGWR <- subset(regression_data) 
+# replace non-sig to na
+asianGWR$coef_Asiansearch <- replace(asianGWR$coef_Asiansearch, 
+                    asianGWR$se_asiansearch < 0,
+                    NA) 
+
+asianGWR$coef_Asianinner <- replace(asianGWR$coef_Asianinner, 
+                    asianGWR$se_asianinner < 0,
+                    NA) 
+
+asianGWR <- asianGWR %>% 
+  mutate_if(is.numeric, ~round(., 2))
+                                        
+tm_shape(asianGWR) +
+  tm_polygons(col = "coef_Asiansearch", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+
+tm_shape(asianGWR) +
+  tm_polygons(col = "coef_Asianinner", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
 ```
 
 ### Searches
@@ -2592,6 +2661,7 @@ regression_data2 <- left_join(regression_data2,innerOuter,
 # change to a factor
 regression_data2<- regression_data2 %>%
   mutate(inner_outer=as.factor(inner_outer_london))
+contrasts(regression_data2$inner_outer)
 ```
 
 #### Simple: S&S \~ crime+inner/outer (R2 = 0.565)
@@ -2964,3 +3034,199 @@ tm_shape(regression_data2) +
   tm_polygons(col = "se_innerOuter", 
               palette = "-RdYlBu")
 ```
+
+
+final maps
+```{r}
+finalGWR <- subset(regression_data2) 
+# replace non-sig to na
+finalGWR$coef_CrimeLog <- replace(finalGWR$coef_CrimeLog, 
+                    finalGWR$se_crimeLog < 0,
+                    NA) 
+
+finalGWR$coef_meadianIncome <- replace(finalGWR$coef_meadianIncome, 
+                    finalGWR$se_medianIncome < 0,
+                    NA) 
+
+finalGWR$coef_oldDeprivation <- replace(finalGWR$coef_oldDeprivation, 
+                    finalGWR$se_deprivation < 0,
+                    NA) 
+
+finalGWR$coef_cars <- replace(finalGWR$coef_cars, 
+                    finalGWR$se_cars < 0,
+                    NA) 
+
+finalGWR$coef_inner_outerInner <- replace(finalGWR$coef_inner_outerInner, 
+                    finalGWR$se_innerOuter < 0,
+                    NA) 
+
+finalGWR <- finalGWR %>% 
+  mutate_if(is.numeric, ~round(., 2))
+                                        
+tm_shape(finalGWR) +
+  tm_polygons(col = "coef_CrimeLog", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+
+tm_shape(finalGWR) +
+  tm_polygons(col = "coef_meadianIncome", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+
+tm_shape(finalGWR) +
+  tm_polygons(col = "coef_oldDeprivation", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+
+tm_shape(finalGWR) +
+  tm_polygons(col = "coef_cars", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+
+tm_shape(finalGWR) +
+  tm_polygons(col = "coef_inner_outerInner", 
+              style = "jenks",
+              palette = "-RdBu", 
+              alpha = 0.5,
+              textNA = "Non-significant")
+```
+
+
+
+
+## Poisson regression
+
+Assumptions (<https://bookdown.org/roback/bookdown-BeyondMLR/ch-poissonreg.html>)
+
+1.  **Poisson Response** The response variable is a count per unit of time or space, described by a Poisson distribution.
+
+2.  **Independence** The observations must be independent of one another.
+
+3.  **Mean=Variance** By definition, the mean of a Poisson random variable must be equal to its variance.
+
+4.  **Linearity** The log of the mean rate, log(λ), must be a linear function of x.
+
+First checking the histogram and scatter plot of the original data
+
+```{r}
+ggplot(regression_data, aes(x=total_ss))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 5) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+ggplot(regression_data, aes(x=total_arrest))+ 
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 1) + 
+  geom_density(colour="red", 
+               size=1, 
+               adjust=1)
+
+qplot(x = total_ss, 
+      y = total_arrest,
+      data = regression_data) +
+stat_smooth(method="glm", se=FALSE, size=1) + 
+  geom_jitter()
+```
+
+Both histogram reveal the pattern often found with distributions of counts of rare events. Many wards have few or none ss60 and arrests and a few wards have a large number of ss60 or arrests making for a distribution that appears to be far from normal. Therefore, Poisson regression should be used to model our data.
+
+Next, checking mean and variance, they should be equal if they follow Poisson distribution.
+
+```{r}
+mean(regression_data$total_arrest)
+var(regression_data$total_arrest)
+```
+
+The variance is slightly larger than the mean so should not be a big problem.
+
+While a Poisson regression model is a good first choice because the responses are counts per period of time (from April 2019 to April 2021), it is important to note that the counts are not directly comparable because they come from different size wards. This issue sometimes is referred to as the need to account for *sampling effort*; in other words, we expect wards with more population to have more reports of arrests since there are more people who could be affected. We can take the differences in ward population into account by including an **offset** in our model.
+
+```{r}
+library(stats)
+model_pr <- glm(total_arrest ~ total_ss, 
+              family = "poisson", 
+              offset = log(all_population),
+              data = regression_data)
+summary(model_pr)
+```
+
+The standard Poisson regression model gives us,
+
+log(λ) = -2.89 + 0.008 ss60,
+
+by exponentiating the coefficient of ss60 we obtain the multiplicative factor by which the mean count changes. In this case, the mean number of S&S (s60) arrests changes by a factor of e\^0.008=1.01 or increases by 0.01 % (since 1.01-1=0.01) with each additional stop and search for violating section 60. 1.01 is referred to as a **rate ratio** or **relative risk**.
+
+We can use standard error to construct a confidence interval for β1. A 95% CI provides a range of plausible values for the ss60 coefficient and can be constructed by using "sandwich" library based on work done by Cameron and Trivedi (2009). <https://stats.idre.ucla.edu/r/dae/poisson-regression/>
+
+```{r}
+library(sandwich)
+cov.mdl2 <- vcovHC(model_pr, type="HC0")
+std.err <- sqrt(diag(cov.mdl2))
+r.est <- cbind(Estimate= coef(model_pr), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(model_pr)/std.err), lower.tail=FALSE),
+LL = coef(model_pr) - 1.96 * std.err,
+UL = coef(model_pr) + 1.96 * std.err)
+r.est
+```
+
+Exponentiating the endpoints yields a confidence interval for the relative risk; i.e., the percent change in arrest counts for each additional percent increase in ss60.
+
+( e^0.006513633^ , e^0.009542442^ ) = (1.00653 , 1.00959) suggesting that we are 95% confident that the mean number in the arrest increase between 0.65% and 0.96% for each additional stop and search for section 60. The interval does not include 1 so we can conclude stop and search is significantly associated with arrests.
+
+Deviance is a way in which to measure how the observed data deviates from the model predictions, similar to sum of squared errors in linear regression. Because we want models that minimize deviance, we calculate the drop-in-deviance when adding age to the model with no covariates (the null model).
+
+The deviances for the null model and the model with age can be found in the model output. A residual deviance for the model with ss60 is reported as 1143.1 with 623 df. The output also includes the deviance and degrees of freedom for the null model (1879.7 with 624 df). The drop-in-deviance is 736.6 (1879.7-1143.1) with a difference of only 1 df, so that the addition of one extra term (ss60) reduced unexplained variability by 736.6.
+
+If the null model were true, we would expect the drop-in-deviance to follow a χ2 distribution with 1 df. Therefore, the p-value for comparing the null model to the model with ss60 is found by determining the probability that the value for a χ2 random variable with one degree of freedom exceeds 736.6, which is essentially 0. Once again, we can conclude that we have statistically significant evidence (χ2 (df=1)=736.6, p\<.001) that average count of arrest increases as stop and search increases.
+
+```{r}
+# model0 is the null/reduced model
+model0 <- glm(total_arrest ~ 1, family = poisson, offset = log(all_population), 
+              data = regression_data)
+anova(model0, model_pr, test = "Chisq")
+```
+
+Based on the above, we can see that the p-value \< 0.05, so we reject the null hypothesis that the regression coefficients are all zero. Hence our model is statistically significant.
+
+**Drop-in-deviance test to compare models**
+
+-   Compute the deviance for each model, then calculate: drop-in-deviance = residual deviance for reduced model -- residual deviance for the larger model.
+
+-   When the reduced model is true, the drop-in-deviance ∼χd2 where d= the difference in the degrees of freedom associated with the two models (that is, the difference in the number of terms/coefficients).
+
+-   A large drop-in-deviance favors the larger model.
+
+```{r}
+rsid <- residuals(model_pr)
+d <- deviance(model_pr)
+par(mfrow=c(2,2))
+plot(regression_data$total_ss, rsid)
+boxplot(rsid~total_ss,xlab="S&S",ylab = "Std residuals",data = regression_data)
+qqnorm(rsid, ylab="Std residuals")
+qqline(rsid,col="blue",lwd=2)
+hist(rsid)
+```
+
+We saw residuals are not normally distributed, probably because we have many observations that have certain amount of searches but no arrests, leading to a bad model prediction.
+
+**Goodness of fit:**
+
+In order to assess goodness of fit, we will look at the deviance residuals, and apply a χdf2 test based on our n-p-1 degrees of freedom. In this case, our p-value is zero, and so we fail to reject the null hypothesis that the model is not a good fit.
+
+```{r}
+c(deviance(model_pr), 1-pchisq(model_pr$deviance, model_pr$df.residual))  # GOF test
+```
+
+The model residual deviance can be used to assess the degree to which the predicted values differ from the observed. When a model is true, we can expect the residual deviance to be distributed as a χ2 random variable with degrees of freedom equal to the model's residual degrees of freedom. Our model has a residual deviance of 1143.1 with 623 df. The probability of observing a deviance this large if the model fits is esentially 0, saying that there is significant evidence of lack-of-fit.
+
+There are several reasons why **lack-of-fit** may be observed. (1) We may be missing important covariates or interactions; a more comprehensive data set may be needed. (2) There may be extreme observations that may cause the deviance to be larger than expected; indeed, there are very few places with very high S&S counts and the majority of places with very little S&S. (3) Lastly, there may be a problem with the Poisson model. In particular, the Poisson model has only a single parameter, λ, for each combination of the levels of the predictors which must describe both the mean and the variance. This limitation can become manifest when the variance appears to be larger than the corresponding means. In that case, the response is more variable than the Poisson model would imply, and the response is considered to be **overdispersed**.
