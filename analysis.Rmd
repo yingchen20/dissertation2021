@@ -113,15 +113,42 @@ crime_london <- crime[boroMap,]
 Create a table counting total crime numbers for each crime type.
 
 ```{r message=False, warning=False}
-library(knitr)
-crime_london %>% 
+pl <- crime_london %>% 
   group_by(crime_type) %>% 
   summarise(., count=n(),) %>%
-  mutate(prop = count/sum(count) *100) %>% 
-  mutate_if(is.numeric, ~round(., 1)) %>% 
+  mutate(prop = count/sum(count)) %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
   arrange(desc(count)) %>% 
-  st_drop_geometry() %>% 
-  kable(.)
+  st_drop_geometry()
+
+percent <- function(x, digits = 2, format = "f", ...) {      # Create user-defined function
+  paste0(formatC(x * 100, format = format, digits = digits, ...), "%")
+}
+
+pl$prop <- percent(pl$prop)
+
+options(scipen=10000)
+
+p <- pl %>% 
+  ggplot(aes(x = reorder(crime_type, count), 
+             y=count, fill= crime_type)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  coord_flip() +
+  geom_text(aes(label=prop), hjust=1, color="white", fontface = "bold",
+            position = position_dodge(0.9), size=3)+
+  theme(legend.position="none",
+        axis.text=element_text(size=7),
+        axis.title = element_text(size = 8)) +
+  scale_fill_manual(values=c("brown", "darkgray", "darkgray",
+                             "darkgray", "darkolivegreen", "darkgray", 
+                             "darkgray", "darkgray", "darkgray", 
+                             "darkgray", "darkgray", "darkgray", 
+                             "brown", "brown")) 
+p <- p +labs(x = NULL, y = "Number of Reported Crime")
+ggsave("output/crime_figure.png", width=6, height=3)
+p
+
+
 ```
 
 I want to count the number of crimes by boroughs but they record crimes by LSOA, so I need to extract borough names from LSOA names. (*later to break down into different years*)
@@ -233,14 +260,38 @@ left_join(ssRaceTab, arrestRaceTab, by=c("legislation", "officer_defined_ethnici
   kable()
 ```
 
-### Trend?
+### Time Trend
 
-```{r}
-ss_london %>%
-  count(year = year(date), officer_defined_ethnicity) %>%
-  ggplot(aes(x = year, y = n, color = officer_defined_ethnicity)) +
+```{r warning=FALSE, message=FALSE}
+test <-  ss_london %>% 
+  st_drop_geometry()
+
+test$Month_Yr <- format(as.Date(test$date), "%Y-%m")
+
+test <- test %>% 
+  group_by(Month_Yr, officer_defined_ethnicity) %>% 
+  summarise(., count=n())
+
+p <- test %>% 
+  ggplot(aes(x = Month_Yr, y = count, group = officer_defined_ethnicity , 
+             color = officer_defined_ethnicity)) +
   geom_point() +
-  geom_line() 
+  geom_line() +
+  geom_jitter(width=0.15)+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5),
+        axis.text=element_text(size=7),
+        axis.title = element_text(size = 8),
+        legend.position="top") + 
+  scale_color_manual(values = c("goldenrod1",
+                                       "black",
+                                       "burlywood4",
+                                       "brown1",
+                                       "cadetblue"),
+                           na.value = "azure3",
+                           name = NULL) 
+p <- p +labs(x = NULL, y ="Number of Stop and Search")
+#ggsave("output/time_series_plot.png", width=6, height = 3)
+p
 ```
 
 ## Borough Clustering
@@ -322,7 +373,7 @@ merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>%
   as.data.frame()
 ```
 
-Show the stats table what objects are commonly searched in each borough
+Crimes
 
 ```{r results='asis'}
 merged_boro %>% 
@@ -341,13 +392,12 @@ Show the stats table what objects are commonly searched in each borough
 merged_boro %>% 
   dplyr::select(boro_name,
                 inner_outer,
-                hit_rate,
-                crime_rate,
-                major_crime_type,
-                major_crime_prop,
                object_of_search,
-               object_search_prop) %>% 
-  arrange(desc(object_search_prop)) %>% 
+               object_search_prop,
+               hit_rate,
+               major_crime_type,
+               crime_rate) %>% 
+  arrange(desc(hit_rate)) %>% 
   kable()
 
 ```
@@ -355,8 +405,7 @@ merged_boro %>%
 add plot
 
 ```{r}
-plotData <- merged_boro %>% 
-  st_drop_geometry() %>% 
+plotData <- merged_boro %>%
   dplyr::select(boro_name,
                 hit_rate,
                 crime_rate) %>%
@@ -2395,6 +2444,7 @@ tm_shape(regression_data) +
 ```
 
 final maps
+
 ```{r}
 whiteGWR <- subset(regression_data) 
 # replace non-sig to na
@@ -3035,8 +3085,8 @@ tm_shape(regression_data2) +
               palette = "-RdYlBu")
 ```
 
-
 final maps
+
 ```{r}
 finalGWR <- subset(regression_data2) 
 # replace non-sig to na
@@ -3098,9 +3148,6 @@ tm_shape(finalGWR) +
               alpha = 0.5,
               textNA = "Non-significant")
 ```
-
-
-
 
 ## Poisson regression
 
