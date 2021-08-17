@@ -547,7 +547,7 @@ figure <- ggarrange(a, b, c, d + rremove("x.text"),
           labels = c("(a)", "(b)", "(c)", "(d)"),
           ncol = 2, nrow = 2)
   
-ggsave(file="output/dbscan_final.png", figure)
+#ggsave(file="output/dbscan_final.png", figure)
 ```
 
 ## st-dbscan

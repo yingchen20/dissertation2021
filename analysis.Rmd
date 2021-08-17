@@ -247,6 +247,7 @@ arrestRaceTab <- ss_london %>%
   st_drop_geometry()
 
 ssRaceTab <- ss_london %>%  
+  filter(legislation == "Criminal Justice and Public Order Act 1994 (section 60)") %>% 
   group_by(legislation, officer_defined_ethnicity) %>% 
   summarise(., searches=n()) %>%
   st_drop_geometry()
@@ -256,11 +257,11 @@ left_join(ssRaceTab, arrestRaceTab, by=c("legislation", "officer_defined_ethnici
   mutate(search_rate = searches/sum(searches) *100,
          hit_rate = arrests/searches *100) %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
-  arrange(desc(legislation)) %>% 
+  arrange(desc(hit_rate)) %>% 
   kable()
 ```
 
-### Time Trend
+### tend over time
 
 ```{r warning=FALSE, message=FALSE}
 test <-  ss_london %>% 
@@ -270,7 +271,8 @@ test$Month_Yr <- format(as.Date(test$date), "%Y-%m")
 
 test <- test %>% 
   group_by(Month_Yr, officer_defined_ethnicity) %>% 
-  summarise(., count=n())
+  summarise(., count=n()) %>% 
+  filter(Month_Yr > "2019-03")
 
 p <- test %>% 
   ggplot(aes(x = Month_Yr, y = count, group = officer_defined_ethnicity , 
@@ -294,11 +296,44 @@ p <- p +labs(x = NULL, y ="Number of Stop and Search")
 p
 ```
 
-## Borough Clustering
+```{r}
+test <-  ss_london %>% 
+  st_drop_geometry()
 
-Detailed tutorial found at <https://uc-r.github.io/hc_clustering>
+test$Month_Yr <- format(as.Date(test$date), "%Y-%m")
 
-Aggregate data to boroughs
+test %>% 
+  group_by(Month_Yr) %>% 
+  summarise(., count=n()) %>% 
+  arrange(., desc(count)) %>% 
+  kable()
+```
+
+From the table, May 2020 has the most searches and Dec 2019 has the least.
+Closely look at the what happend in May 2020:
+
+```{r}
+test <-  ss_london %>% 
+  st_drop_geometry()
+
+test$Month_Yr <- format(as.Date(test$date), "%Y-%m")
+
+a <- test %>% 
+  filter(Month_Yr == "2020-05") %>% 
+  group_by(object_of_search) %>% 
+  summarise(., count=n()) %>% 
+  arrange(desc(count))
+
+b <- test %>% 
+  filter(Month_Yr == "2019-12") %>% 
+  group_by(object_of_search) %>% 
+  summarise(., count=n()) %>% 
+  arrange(desc(count))
+  
+```
+
+
+## Borough aggregation
 
 ```{r message=FALSE}
 library(tidyverse)  # data manipulation
@@ -378,7 +413,6 @@ Crimes
 ```{r results='asis'}
 merged_boro %>% 
   dplyr::select(boro_name,
-                inner_outer,
                 crime_rate,
                major_crime_type,
                major_crime_prop) %>% 
@@ -399,23 +433,6 @@ merged_boro %>%
                crime_rate) %>% 
   arrange(desc(hit_rate)) %>% 
   kable()
-
-```
-
-add plot
-
-```{r}
-plotData <- merged_boro %>%
-  dplyr::select(boro_name,
-                hit_rate,
-                crime_rate) %>%
-  pivot_longer(cols = (hit_rate |crime_rate),
-               names_to = "names",
-               values_to = "rates")
-
-ggplot(plotData, aes(x=boro_name, y=rates, group=names)) +
-  geom_line(aes(color=names)) +
-  geom_point(aes(color=names))
 ```
 
 The hit rate is very inconsistent across boroughs
@@ -431,10 +448,9 @@ merged_boro %>%
   group_by(inner_outer) %>% 
   summarise_at(vars(ss_rate, arrest_rate, crime_rate, hit_rate),list(~mean(., trim = .2, na.rm=T))) %>% 
   kable()
-
 ```
 
-### Borough-level plots
+### maps
 
 ```{r}
 colnames(merged_boro)
@@ -446,12 +462,16 @@ merged_boro <- merged_boro %>%
             boroMap %>% dplyr::select(GSS_CODE, geometry),
             by = "GSS_CODE") %>% 
   st_as_sf()
+```
 
+
+```{r}
 p1 <- tm_shape(merged_boro) + 
   tm_fill("crime_rate", 
           style="jenks",
           palette="viridis",
-          title="Total Crime Rate (Jenks)")+
+          title="Crime Rate (Jenks)")+
+  tm_text("boro_name", size= 0.4) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
@@ -464,7 +484,8 @@ p2 <- tm_shape(merged_boro) +
   tm_fill("ss_rate", 
           style="jenks",
           palette="viridis",
-          title="Total Search Rate (Jenks)")+
+          title="Search Rate (Jenks)")+
+    tm_text("boro_name", size= 0.4) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
@@ -477,7 +498,8 @@ p3 <- tm_shape(merged_boro) +
   tm_fill("arrest_rate", 
           style="jenks",
           palette="viridis",
-          title="total Arrest Rate (Jenks)")+
+          title="Arrest Rate (Jenks)")+
+      tm_text("boro_name", size= 0.4) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
@@ -490,7 +512,8 @@ p4 <- tm_shape(merged_boro) +
   tm_fill("hit_rate", 
           style="jenks",
           palette="viridis",
-          title="total Hit Rate (Jenks)")+
+          title="Hit Rate (Jenks)")+
+      tm_text("boro_name", size= 0.4) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
@@ -500,9 +523,69 @@ p4 <- tm_shape(merged_boro) +
   tm_credits("(d)", position=c(0,0.8), size=1)
 
 p <- tmap_arrange(p1, p2, p3, p4)
+#tmap_save(p, "output/boroughMaps.png",dpi=500)
+p
+```
+```{r}
+p1 <- tm_shape(merged_boro) + 
+  tm_fill("crime_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Crime Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(a)", position=c(0,0.8), size=1)
+
+p2 <- tm_shape(merged_boro) + 
+  tm_fill("ss_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Search Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(b)", position=c(0,0.8), size=1)
+
+p3 <- tm_shape(merged_boro) + 
+  tm_fill("arrest_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Arrest Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(c)", position=c(0,0.8), size=1)
+
+p4 <- tm_shape(merged_boro) + 
+  tm_fill("hit_rate", 
+          style="jenks",
+          palette="viridis",
+          title="Hit Rate (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(d)", position=c(0,0.8), size=1)
+
+p <- tmap_arrange(p1, p2, p3, p4)
+tmap_save(p, "output/boroughMaps_NoWords.png",dpi=500)
 p
 ```
 
+
+The following section is excluded from the report. 
 Prepare data for clustering
 
 ```{r}
@@ -521,7 +604,7 @@ df <- df %>%
   dplyr::select(-boro_name)
 ```
 
-### Agglomerative clustering
+Agglomerative clustering
 
 To determine which clustering method I choose use, agnes function can calculate the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure).
 
@@ -576,7 +659,7 @@ plot(hc, cex = 0.6)
 rect.hclust(hc, k = 4, border = 2:5)
 ```
 
-### Cluster characteristics
+Cluster characteristics
 
 ```{r message=False, warning=False, results='asis'}
 # assign clusters back to rate df
@@ -609,7 +692,7 @@ merged_boro <- merged_boro %>%
   st_as_sf() 
 ```
 
-### Maps
+Maps
 
 ```{r warning=F, message=F}
 # add inner and outer london london outline
@@ -639,11 +722,11 @@ cluster_map <- tm_shape(merged_boro) +
              position = c("left", "bottom")) +
   tm_scale_bar(position = c("left", "bottom")) 
 
-tmap_save(cluster_map, "output/cluster_map.png",outer.margins = 0.2,dpi=500)
+#tmap_save(cluster_map, "output/cluster_map.png",outer.margins = 0.2,dpi=500)
 cluster_map
 ```
 
-## MSOA Spatial Autocorrelation
+## MSOA aggregation
 
 We have explored the point pattern analysis for London S&S and what about the MSOA patterns? Where are the hotspots and how to explain them? To do that, we need to count the number of crimes and S&S for each geographic unit. Here, I chose to group by msoa.
 
@@ -810,7 +893,7 @@ all_data <- merged %>%
 
 ```
 
-### Overall trend
+### stats
 
 Hit rate is, what proportion of searches, by race, were successful? If racial groups have different hit rates, it can imply that racial groups are being subjected to different standards.
 
@@ -986,7 +1069,7 @@ p <- tmap_arrange(p1, p2, p3, p4)
 p
 ```
 
-### Ethical Hit rate
+### disproportionality 
 
 ```{r message=FALSE, warning=FALSE}
 # select columns we need but first change the msoa code name 
@@ -1110,7 +1193,7 @@ hit_rate_plot <- main_data_white %>%
     y = minority_hit_rate
   )) +
   geom_point(aes(color=all_search_count, size=all_search_count), pch = 18) +
-  scale_fill_viridis_c(option = "plasma",
+  scale_fill_viridis_c(option = "viridis",
                        aesthetics = c("colour", "fill")) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   scale_x_continuous("White Hit Rate (%)", 
@@ -1129,7 +1212,7 @@ hit_rate_plot
 ggsave("output/hit_rate_comparion_plot.png")
 ```
 
-### Map hit rate
+### maps
 
 ```{r}
 # ethical groups
@@ -1197,7 +1280,7 @@ p <- tmap_arrange(p1, p2, p3, p4)
 p
 ```
 
-### 0 Hit rate
+### anomalies
 
 ```{r}
 # Examine the zeros in asian hit rate 
@@ -1646,16 +1729,19 @@ table(all_rates$quad_sig_asian_arrest)
 table(all_rates$quad_sig_total_crime)
 ```
 
-### Maps
+### maps
 
-```{r}
-MoranColours<- rev(brewer.pal(3, "BrBG"))
-
+```{r warning=FALSE}
 t1 <- tm_shape(all_rates) + 
   tm_fill("quad_sig_black_search",
         palette= "RdGy",
         midpoint=NA,
         title="LISA, Black Searches") +
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold") +
   tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
@@ -1666,25 +1752,17 @@ t1 <- tm_shape(all_rates) +
             legend.position = c(.8,0)) +
   tm_credits("(a)", position=c(0,0.8), size=1)
 
-t2 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_white_search",
+t3 <- tm_shape(all_rates) + 
+  tm_fill("quad_sig_white_search",
         palette= "RdGy",
         midpoint=NA,
         title="LISA, White Searches") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(b)", position=c(0,0.8), size=1)
-
-t3 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_asian_search",
-        palette= "RdGy",
-        midpoint=NA,
-        title="LISA, Asian Searches") +
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold") +
+    tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
@@ -1694,26 +1772,17 @@ t3 <- tm_shape(all_rates) +
             legend.position = c(.8,0))+
   tm_credits("(c)", position=c(0,0.8), size=1)
 
-t4 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_black_arrest",
-        palette= "RdGy",
-        midpoint=NA,
-        title="LISA, Black Arrests") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(d)", position=c(0,0.8), size=1)
-
-
 t5 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_white_arrest",
+  tm_fill("quad_sig_asian_search",
         palette= "RdGy",
         midpoint=NA,
-        title="LISA, White Arrests") +
+        title="LISA, Asian Searches") +
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold") +  
+  tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
@@ -1723,11 +1792,58 @@ t5 <- tm_shape(all_rates) +
             legend.position = c(.8,0))+
   tm_credits("(e)", position=c(0,0.8), size=1)
 
+t2 <- tm_shape(all_rates) + 
+  tm_fill("quad_sig_black_arrest",
+        palette= "RdGy",
+        midpoint=NA,
+        title="LISA, Black Arrests") +
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold") +
+    tm_borders(NA, alpha = 0.3) +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.outside.size = 1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(b)", position=c(0,0.8), size=1)
+
+
+t4 <- tm_shape(all_rates) + 
+  tm_fill("quad_sig_white_arrest",
+        palette= "RdGy",
+        midpoint=NA,
+        title="LISA, White Arrests") +
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold") +
+    tm_borders(NA, alpha = 0.3) +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(d)", position=c(0,0.8), size=1)
+
 t6 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_asian_arrest",
+  tm_fill("quad_sig_asian_arrest",
         palette= "RdGy",
         midpoint=NA,
         title="LISA, Asian Arrests") +
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold") +
+    tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
@@ -1737,24 +1853,9 @@ t6 <- tm_shape(all_rates) +
             legend.position = c(.8,0))+
   tm_credits("(f)", position=c(0,0.8), size=1)
 
-t7 <- tm_shape(all_rates) + 
-  tm_polygons("quad_sig_total_crime",
-        palette= "RdGy",
-        midpoint=NA,
-        title="LISA, Total Crimes") +
-  tm_legend(show=T)+
-  tm_layout(frame=FALSE,            
-            legend.outside.size = 1,
-            legend.title.size = 0.5,
-            legend.text.size = 0.3,
-            legend.outside = FALSE,
-            legend.position = c(.8,0))+
-  tm_credits("(g)", position=c(0,0.8), size=1)
-
-
-
 t=tmap_arrange(t1, t2, t3, t4, t5, t6,
-               nrow = 2, ncol = 3)
+               nrow = 3, ncol = 2)
+#tmap_save(t, "output/hit_rate_map.png",dpi=500)
 t
 ```
 
@@ -1770,7 +1871,7 @@ So essentially this map now tells us that there was statistically significant mo
 
 The local moran's I test suggests different ethic groups have different hot-spots of frequently searched places and arrested places. Therefore, it is reasonable to investigate each of the ethnic group in terms of their search rate and arrest rate more thoroughly.
 
-### Research Hypothesis
+### hypothesis
 
 -   Is there a relationship between S&S (s60) search rate and arrest rate?
 
@@ -1788,9 +1889,7 @@ The local moran's I test suggests different ethic groups have different hot-spot
 colnames(all_data)
 ```
 
-### Arrests
-
-#### Total
+#### total
 
 Assumption 1: there is a linear relationship between my variables --
 
@@ -2070,7 +2169,7 @@ totalGWR <- totalGWR %>%
 ```{r}
 tm1 <- tm_shape(totalGWR) + 
   tm_fill("coef_search", 
-          palette= "-RdYlBu",
+          palette= "viridis",
           style = "jenks",
           title = "GWR, total search coefficients",
           textNA = "Non-significant",
@@ -2575,12 +2674,12 @@ colnames(all_data)
 ```
 
 ```{r}
-symbox(~unemp_rate, 
+symbox(~total_arrest_rate, 
        all_data, 
        na.rm=T,
        powers=seq(-3,3,by=.5))
 
-ggplot(all_data, aes(x=(unemp_rate))) + 
+ggplot(all_data, aes(x=log(median_income))) + 
   geom_histogram()
 ```
 
@@ -2602,7 +2701,9 @@ regression_data2 <- all_data %>%
                 obesity_children,
                 obesity_aged16) %>% 
   mutate(search_log = log(total_search_rate),
+         arrest_log = log(total_arrest_rate),
          crime_log = log(total_crime_rate),
+         income_log = log(median_income),
          lone_parent_with_children_log = log(lone_parent_with_children),
          unemp_log = log(unemp_rate)) %>% 
   mutate_if(is.numeric, ~round(., 2)) %>% 
@@ -2627,7 +2728,7 @@ contrasts(regression_data2$inner_outer)
 #### Simple: S&S \~ crime+inner/outer (R2 = 0.567)
 
 ```{r}
-model_l2 <- lm(search_log ~ crime_log + inner_outer,
+model_l2 <- lm(arrest_log ~ crime_log + inner_outer,
                   data = regression_data2)
 summary(model_l2) 
 ```
@@ -2640,9 +2741,9 @@ colnames(regression_data2)
 
 ```{r}
 # build model 
-model_mlr <- lm(search_log ~ crime_log  + median_income + unemp_log
+model_mlr <- lm(arrest_log ~ crime_log  + income_log + unemp_log
                 + income_deprivation_rate + income_old_deprivation_rate
-                + bad_health_rate + cars_rate +inner_outer + lone_parent_rate
+                + bad_health_rate + cars_rate +inner_outer 
                 + lone_parent_with_children_log + obesity_children + obesity_aged16,
                   data = regression_data2)
 summary(model_mlr)
@@ -2658,10 +2759,11 @@ vif(model_mlr)
 
 ```{r}
 # build model 
-model_final <- lm(search_log ~ crime_log  
+model_final <- lm(arrest_log ~ crime_log  
+                  + income_log
                   + obesity_aged16
                   + lone_parent_with_children_log
-                  + inner_outer
+                  + bad_health_rate
                   + cars_rate,
                   data = regression_data2)
 summary(model_final)
@@ -2831,10 +2933,11 @@ coordsWSP
 
 ```{r}
 #calculate kernel bandwidth
-GWRbandwidth <- gwr.sel(search_log ~ crime_log  
+GWRbandwidth <- gwr.sel(arrest_log ~ crime_log  
+                  + income_log
                   + obesity_aged16
                   + lone_parent_with_children_log
-                  + inner_outer
+                  + bad_health_rate
                   + cars_rate,
                   data = regression_data2_SP,
                         coords=coordsWSP,
@@ -2846,9 +2949,10 @@ run the model
 ```{r}
 #run the gwr model
 model_gwr = gwr(search_log ~ crime_log  
+                  + income_log
                   + obesity_aged16
                   + lone_parent_with_children_log
-                  + inner_outer
+                  + bad_health_rate
                   + cars_rate,
                   data = regression_data2_SP, 
                 coords=coordsWSP, 
@@ -2871,7 +2975,8 @@ names(results)
 regression_data2 <- regression_data2 %>%
   mutate(coef_crimeLog = results$crime_log,
          coef_cars = results$cars_rate,
-         coef_inner = results$inner_outerInner.London,
+         coef_incomeLog = results$income_log,
+         coef_health = results$bad_health_rate,
          coef_loneParentLog = results$lone_parent_with_children_log,
          coef_obesity = results$obesity_aged16)
 ```
@@ -2899,7 +3004,8 @@ sigTest_crime = abs(model_gwr$SDF$crime_log) - (2* model_gwr$SDF$crime_log_se)
 sigTest_obesity = abs(model_gwr$SDF$obesity_aged16) - (2* model_gwr$SDF$obesity_aged16_se)
 sigTest_loneParent = abs(model_gwr$SDF$lone_parent_with_children_log) - (2* model_gwr$SDF$lone_parent_with_children_log_se)
 sigTest_cars = abs(model_gwr$SDF$cars_rate) - (2* model_gwr$SDF$cars_rate_se)
-sigTest_inner = abs(model_gwr$SD$inner_outerInner.London) - (2* model_gwr$SDF$inner_outerInner.London_se)
+sigTest_income = abs(model_gwr$SDF$income_log) - (2* model_gwr$SDF$income_log_se)
+sigTest_health = abs(model_gwr$SDF$bad_health_rate) - (2* model_gwr$SDF$bad_health_rate_se)
 
 #store significance results
 regression_data2 <- regression_data2 %>%
@@ -2907,7 +3013,8 @@ regression_data2 <- regression_data2 %>%
          se_obesity = sigTest_obesity,
          se_loneParent = sigTest_loneParent,
          se_cars = sigTest_cars,
-         se_inner = sigTest_inner)
+         se_income = sigTest_income,
+         se_health = sigTest_health)
 ```
 
 #### final maps
@@ -2927,16 +3034,20 @@ finalGWR$coef_cars <- replace(finalGWR$coef_cars,
                     finalGWR$se_cars < 0,
                     NA) 
 
-finalGWR$coef_inner <- replace(finalGWR$coef_inner, 
-                    finalGWR$se_inner < 0,
-                    NA) 
-
 finalGWR$coef_loneParentLog <- replace(finalGWR$coef_loneParentLog, 
                     finalGWR$se_loneParent < 0,
                     NA) 
 
 finalGWR$coef_obesity <- replace(finalGWR$coef_obesity, 
                     finalGWR$se_obesity < 0,
+                    NA) 
+
+finalGWR$coef_incomeLog <- replace(finalGWR$coef_incomeLog, 
+                    finalGWR$se_income < 0,
+                    NA) 
+
+finalGWR$coef_health <- replace(finalGWR$coef_health, 
+                    finalGWR$se_health < 0,
                     NA) 
 
 finalGWR <- finalGWR %>% 
@@ -2960,16 +3071,13 @@ f1 <- tm_shape(finalGWR) +
             frame = FALSE,
             legend.position = c(.8,0),
             legend.title.fontface = "bold") +
-  tm_credits("(a)", position=c(0,0.8), size=1) +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
+  tm_credits("(a)", position=c(0,0.8), size=1) 
 
 f2 <- tm_shape(finalGWR) + 
-  tm_fill("coef_inner", 
+  tm_fill("coef_incomeLog", 
           palette= "-RdYlBu",
           style = "jenks",
-          title = "GWR, inner London coefficients",
+          title = "GWR, logged median income coefficients",
           textNA = "Non-significant",
           title.fontface = "bold",
           alpha = 0.8)+  
@@ -2980,10 +3088,7 @@ f2 <- tm_shape(finalGWR) +
             frame = FALSE,
             legend.position = c(.8,0),
             legend.title.fontface = "bold") +
-  tm_credits("(b)", position=c(0,0.8), size=1) +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
+  tm_credits("(b)", position=c(0,0.8), size=1) 
 
 f3 <- tm_shape(finalGWR) + 
   tm_fill("coef_loneParentLog", 
@@ -3020,10 +3125,7 @@ f4 <- tm_shape(finalGWR) +
             frame = FALSE,
             legend.position = c(.8,0),
             legend.title.fontface = "bold") +
-  tm_credits("(d)", position=c(0,0.8), size=1) +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
+  tm_credits("(d)", position=c(0,0.8), size=1) 
 
 f5 <- tm_shape(finalGWR) + 
   tm_fill("coef_cars", 
@@ -3040,12 +3142,29 @@ f5 <- tm_shape(finalGWR) +
             frame = FALSE,
             legend.position = c(.8,0),
             legend.title.fontface = "bold") +
-  tm_credits("(e)", position=c(0,0.8), size=1) +
+  tm_credits("(e)", position=c(0,0.8), size=1) 
+
+f6 <- tm_shape(finalGWR) + 
+  tm_fill("coef_health", 
+          palette= "-RdYlBu",
+          style = "jenks",
+          title = "GWR, bad health coefficients",
+          textNA = "Non-significant",
+          title.fontface = "bold",
+          alpha = 0.8)+  
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.6,
+            legend.text.size = 0.5,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            legend.title.fontface = "bold") +
+  tm_credits("(f)", position=c(0,0.8), size=1) +
   tm_compass(type = "4star", size = 3, fontsize = 0.5,
              position = c("left", "bottom")) +
   tm_scale_bar(position = c("left", "bottom")) 
 
-tmap_arrange(f1, f2, f3, f4, f5, 
+tmap_arrange(f1, f2, f3, f4, f5, f6,
              nrow = 3, ncol = 2)
 ```
 
