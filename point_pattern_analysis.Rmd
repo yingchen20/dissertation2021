@@ -176,7 +176,7 @@ DBSCAN requires two parameters: 1. Epsilon - the radius within which the algorit
 
 Two ways to determine Epsilon: 1. Ripley's K - where K values above the Poisson distribution indicates areas of clustering; needs to find the K values' cutoff between above and below the Poisson distribution. 2. KNNDistance - it is the distance of each point to its k-th nearest neighbor; needs to find a knee in the plot. "The idea behind this heuristic is that points located inside of clusters will have a small k-nearest neighbor distance, because they are close to other points in the same cluster, while noise points are more isolated and will have a rather large kNN distance (Hahsler et al., 2019).
 
-Potential way to determine MinPts: The rule of thumb for setting minPts is to use at least the number of dimensions of the dataset plus one (Hahsler et al., 2019). However, by setting MinPts = 3 (which is what Hahsler et al suggest) it results in 229 unique cluster for all S&S (s60) points, which is too many.
+Potential way to determine MinPts: The rule of thumb for setting minPts is to use at least the number of dimensions of the dataset plus one (Hahsler et al., 2019). However, by setting MinPts = 3 (which is what Hahsler et al suggest) it results in 229 unique cluster for all S&S points, which is too many.
 
 ### Black arrests
 
@@ -202,10 +202,13 @@ ss_blackPoints<- ss_blackSP %>%
 1.  Choose Ripley's K method to select suitable parameters:
 
 ```{r message=FALSE, warning=FALSE}
-ss_blackPPP %>%
+png("output/Rip_Black.png", units="in", width=6, height=4, res=300)
+r1 <- ss_blackPPP %>%
   Kest(., correction="border") %>%
-  plot(xlim=c(0,1000)) %>% 
+  plot(xlim=c(0,1000),
+       main="Ripley's K Test \n Black S&S Arrests (threshold = 400)") %>% 
   abline(v = 400, col = "blue", lty = 2)
+dev.off()
 ```
 
 Distance = 400, minimum points = 50
@@ -306,10 +309,13 @@ ss_whitePoints<- ss_whiteSP %>%
 1.  Ripley's K method:
 
 ```{r message=FALSE, warning=FALSE}
-ss_whitePPP %>%
-  Kest(., correction="border") %>% 
-  plot(xlim=c(0,1000)) %>% 
+png("output/Rip_White.png", units="in", width=6, height=4, res=300)
+r1 <- ss_whitePPP %>%
+  Kest(., correction="border") %>%
+  plot(xlim=c(0,1000),
+       main="Ripley's K Test \n White S&S Arrests (threshold = 450)") %>% 
   abline(v = 450, col = "blue", lty = 2)
+dev.off()
 ```
 
 ```{r message=FALSE, warning=FALSE}
@@ -373,6 +379,22 @@ autoplot.OpenStreetMap(basemap_bng) +
   theme(plot.title=element_text(hjust = 0.5, face="bold"))+
   labs(caption = "Copyright OpenStreetMap contributors",
        x="Meter",y="Meter")
+
+autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=hulls_b,
+             aes(longitude,latitude,
+                 colour=dbcluster),
+             size=0.1, alpha=0.3) + 
+    scale_color_viridis(option = "D",
+                        begin = 0.9,
+                        end = 0.5, 
+                        name = "Black Arrests",
+                        labels = NULL) +
+  theme(legend.position = "right") +
+  ggtitle("DBSCAN Cluster for S&S Only Targeted to Black People")+
+  theme(plot.title=element_text(hjust = 0.5, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
 ```
 
 ### Asian
@@ -397,10 +419,13 @@ ss_asianPoints<- ss_asianSP %>%
 1.  Ripley's K:
 
 ```{r message=FALSE, warning=FALSE}
-ss_asianPPP %>%
+png("output/Rip_Asian.png", units="in", width=6, height=4, res=300)
+r1 <- ss_asianPPP %>%
   Kest(., correction="border") %>%
-  plot(xlim=c(0,1000)) %>% 
+  plot(xlim=c(0,1000),
+       main="Ripley's K Test \n Asian S&S Arrests (threshold = 550)") %>% 
   abline(v = 550, col = "blue", lty = 2)
+dev.off()
 ```
 
 ```{r message=FALSE, warning=FALSE}
@@ -480,10 +505,14 @@ a <- autoplot.OpenStreetMap(basemap_bng) +
                         end = 0, 
                         name = "Black \nArrests",
                         labels = NULL) +
-  theme(legend.title = element_text(size=9),
-        legend.position = "right") +
-  labs(caption = "Copyright OpenStreetMap contributors",
-       x="Meter",y="Meter")
+  labs(title = "DBSCAN, Epsilon=400 m, MinPts=50",
+       x="Meter", y="Meter") +
+ theme(axis.text=element_text(size=7),
+        axis.title = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size= 7),
+       legend.position = "right",
+       plot.title = element_text(face = "bold", size = 10)) 
 
 b <- autoplot.OpenStreetMap(basemap_bng) + 
   geom_point(data=hulls_w,
@@ -495,10 +524,14 @@ b <- autoplot.OpenStreetMap(basemap_bng) +
                         end = 0.5, 
                         name = "White \nArrests",
                         labels = NULL) +
-  theme(legend.position = "right",
-        legend.title = element_text(size=9)) +
-  labs(caption = "Copyright OpenStreetMap contributors",
-       x="Meter",y="Meter")
+  ggtitle("DBSCAN, Epsilon=450 m, MinPts=50")+
+ labs(x="Meter", y="Meter") +
+ theme(axis.text=element_text(size=7),
+        axis.title = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size= 7),
+       legend.position = "right",
+       plot.title = element_text(face = "bold", size = 10)) 
 
 c <-  autoplot.OpenStreetMap(basemap_bng) + 
   geom_point(data=hulls_a,
@@ -510,10 +543,14 @@ c <-  autoplot.OpenStreetMap(basemap_bng) +
                         end = 1, 
                         name = "Asian \nArrests",
                         labels = NULL) +
-  theme(legend.position = "right",
-        legend.title = element_text(size=9)) +
-  labs(caption = "Copyright OpenStreetMap contributors",
-       x="Meter",y="Meter")
+    ggtitle("DBSCAN, Epsilon=550 m, MinPts=50")+
+   labs(x="Meter", y="Meter") +
+ theme(axis.text=element_text(size=7),
+        axis.title = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size= 7),
+       legend.position = "right",
+       plot.title = element_text(face = "bold", size = 10)) 
 
 d <- autoplot.OpenStreetMap(basemap_bng) +
   geom_point(data=hulls_b, 
@@ -541,13 +578,23 @@ d <- autoplot.OpenStreetMap(basemap_bng) +
                    fill=dbcluster),
                fill = "#FDE725FF") +
   labs(caption = "Copyright OpenStreetMap contributors",
-       x="Meter",y="Meter")
+       x="Meter",y="Meter") +
+ theme(axis.text=element_text(size=7),
+        axis.title = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size= 7),
+       legend.position = "right") 
 
 figure <- ggarrange(a, b, c, d + rremove("x.text"), 
           labels = c("(a)", "(b)", "(c)", "(d)"),
-          ncol = 2, nrow = 2)
+          font.label = (size = 10),
+          ncol = 2, nrow = 2) +
+  theme(plot.margin = margin(0.1,0.1,2,0.1, "cm")) 
+
   
-#ggsave(file="output/dbscan_final.png", figure)
+ggsave(file="output/dbscan_final.png", figure)
+
+figure
 ```
 
 ## st-dbscan
@@ -577,7 +624,7 @@ location_with_visits <-
                          x = "longitude", 
                          y = "latitude", 
                          t = "date",
-                         eps = 0.005,  # 0.005 latitude/longitude ~ 500m either way in London
+                         eps = 0.010,  # 0.005 latitude/longitude ~ 500m either way in London
                          eps_t = 1440, # 1440 minutes = 1day
                          minpts = 10)
 ```
@@ -596,20 +643,86 @@ clusters <-
       time_spent = sum(time_inc,na.rm = T),
       ethnicity_label = mode(officer_defined_ethnicity)            
     ),    
-    by=cluster] 
+    by=cluster]
 
-kable(clusters, caption = "ST-DBSCAN Cluster Labels")
+stats <- clusters %>% 
+  arrange(desc(n)) %>% 
+  rename(number_searchs = "n")
+
+kable(stats, caption = "ST-DBSCAN Cluster Labels")
 ```
+
+```{r}
+stats %>% 
+  group_by(ethnicity_label) %>% 
+  summarise(., count=n()) %>% 
+  arrange(desc(count)) %>% 
+  kable()
+```
+
+```{r}
+stats %>% 
+  group_by(ethnicity_label, time_spent) %>% 
+  group_by(ethnicity_label) %>% 
+  summarise(., time=sum(time_spent)) %>% 
+  arrange(desc(time)) %>% 
+  kable()
+```
+
 
 ```{r message=FALSE}
 # order by time
 setkey(location_with_visits, date)
 
 library(leaflet)
+library(htmlwidgets)
 # plot on leaflet map
-leaflet(data = clusters) %>% 
+m <- leaflet(data = clusters) %>% 
   addProviderTiles("OpenStreetMap.Mapnik") %>% 
   addMarkers(popup = ~paste0("Time spent: ",round(time_spent/60, 1), " hours.<br>",
                              "S&S Ethnicity Cluster ",cluster,": ",ethnicity_label,"<br>",
                              "Counts: ", n))
+m
+
+saveWidget(m, file="stdbscan_map.html", selfcontained = TRUE)
 ```
+
+```{r}
+stPlot <- location_with_visits %>% 
+  st_as_sf(.) %>% 
+  st_transform(., 27700) %>% 
+  dplyr::select(cluster, geometry) %>% 
+  rename(st_clusters = "cluster")
+
+stPlot <- sfc_as_cols(stPlot, c("longitude", "latitude"))
+
+hulls <- stPlot %>%
+  group_by(st_clusters) %>%
+  dplyr::mutate(hull = 1:n(),
+                hull = factor(hull, chull(longitude, latitude)))%>%
+  arrange(hull) %>% 
+  filter(st_clusters >=1) # since dbcluster < 1 are noises
+
+# plot
+p <- autoplot.OpenStreetMap(basemap_bng) + 
+  geom_point(data=hulls,
+             aes(longitude,latitude,
+                 colour=st_clusters,
+                 fill=st_clusters),
+             size=0.5, alpha=0.5) + 
+  geom_polygon(data = hulls,
+               aes(longitude,latitude,
+                   group = st_clusters,
+                   fill = st_clusters)) +
+ theme(axis.text=element_text(size=7),
+        axis.title = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size= 7),
+       legend.position = "right") +
+  theme(plot.title=element_text(hjust = 0.05, face="bold"))+
+  labs(caption = "Copyright OpenStreetMap contributors",
+       x="Meter",y="Meter")
+
+ggsave(file="output/stdbscan_map.png", p)
+```
+

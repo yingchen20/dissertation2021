@@ -194,6 +194,11 @@ ss_london <- ss[boroMap,]
 ```
 
 Check how police distributes their power on stop and search -- Searches for what?
+```{r}
+a <-  ss_london %>% 
+  filter(outcome =="Arrest")
+```
+
 
 ```{r message=False, warning=False}
 ssTab <- ss_london %>% 
@@ -209,10 +214,10 @@ arrestTab <- ss_london %>%
 
 left_join(ssTab, arrestTab, by = c("legislation", "object_of_search")) %>% 
   as.data.frame() %>% 
-  mutate(search_rate = searches/sum(searches) *100,
+  mutate(search_prop = searches/sum(searches) *100,
          hit_rate = arrests/searches *100) %>% 
   mutate_if(is.numeric, ~round(., 1)) %>% 
-  arrange(desc(hit_rate)) %>% 
+  arrange(desc(search_prop)) %>% 
   kable()
 ```
 
@@ -236,6 +241,8 @@ left_join(ssTab, arrestTab, by = "legislation") %>%
   arrange(desc(hit_rate)) %>% 
   kable()
 ```
+
+
 
 Who are searched and arrested?
 
@@ -307,6 +314,13 @@ test %>%
   summarise(., count=n()) %>% 
   arrange(., desc(count)) %>% 
   kable()
+```
+
+
+```{r}
+a <- test %>% 
+  filter (legislation == "Criminal Justice and Public Order Act 1994 (section 60)") %>% 
+  filter(Month_Yr > "2020-04")
 ```
 
 From the table, May 2020 has the most searches and Dec 2019 has the least.
@@ -404,7 +418,7 @@ merged_boro <- left_join(ss_count_boro, arrest_count_boro) %>%
          hit_rate = total_arrest_count/total_ss_count *100,
          object_search_prop = object_searched_count/total_ss_count *100,
          major_crime_prop =  major_crime_count/total_crime_count *100) %>% 
-  mutate_if(is.numeric, ~round(., 2)) %>% 
+  mutate_if(is.numeric, ~round(., 1)) %>% 
   as.data.frame()
 ```
 
@@ -425,21 +439,21 @@ Show the stats table what objects are commonly searched in each borough
 ```{r results='asis'}
 merged_boro %>% 
   dplyr::select(boro_name,
-                inner_outer,
-               object_of_search,
-               object_search_prop,
+               crime_rate,
+               ss_rate,
                hit_rate,
                major_crime_type,
-               crime_rate) %>% 
+               object_of_search) %>% 
   arrange(desc(hit_rate)) %>% 
   kable()
 ```
 
-The hit rate is very inconsistent across boroughs
+Rates are very inconsistent across boroughs
 
 ```{r}
-summary(merged_boro$hit_rate)
+summary(merged_boro$crime_rate)
 summary(merged_boro$ss_rate)
+summary(merged_boro$hit_rate)
 summary(merged_boro$arrest_rate)
 ```
 
@@ -768,7 +782,8 @@ cols <- c(
 "lone_parents_2011_census_lone_parent_not_in_employment_percent",
 "lone_parents_2011_census_all_lone_parent_housholds_with_dependent_children",
 "obesity_percent_of_measured_children_in_year_6_who_were_classified_as_obese_2009_10_2011_12",
-"obesity_percentage_of_the_population_aged_16_with_a_bmi_of_30_modelled_estimate_2006_2008")
+"obesity_percentage_of_the_population_aged_16_with_a_bmi_of_30_modelled_estimate_2006_2008",
+"qualifications_2011_census_no_qualifications")
 
 # rename variables
 msoaDataMerged <-
@@ -794,7 +809,8 @@ msoaDataMerged <-
          lone_parent_rate = "lone_parents_2011_census_lone_parent_not_in_employment_percent",
          lone_parent_with_children = "lone_parents_2011_census_all_lone_parent_housholds_with_dependent_children",
          obesity_children = "obesity_percent_of_measured_children_in_year_6_who_were_classified_as_obese_2009_10_2011_12",
-         obesity_aged16 = "obesity_percentage_of_the_population_aged_16_with_a_bmi_of_30_modelled_estimate_2006_2008")
+         obesity_aged16 = "obesity_percentage_of_the_population_aged_16_with_a_bmi_of_30_modelled_estimate_2006_2008",
+         no_qualification = "qualifications_2011_census_no_qualifications")
 
 ```
 
@@ -1192,7 +1208,7 @@ hit_rate_plot <- main_data_white %>%
     x = white_hit_rate,
     y = minority_hit_rate
   )) +
-  geom_point(aes(color=all_search_count, size=all_search_count), pch = 18) +
+  geom_point(aes(color=all_search_count, size=all_search_count, pch=18)) +
   scale_fill_viridis_c(option = "viridis",
                        aesthetics = c("colour", "fill")) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
@@ -1219,64 +1235,90 @@ ggsave("output/hit_rate_comparion_plot.png")
 summary(all_data$black_hit_rate)
 summary(all_data$white_hit_rate)
 summary(all_data$asian_hit_rate)
-summary(all_data$other_hit_rate)
 ```
 
 ```{r}
 p1 <- tm_shape(all_data) + 
-  tm_fill("black_hit_rate", 
+  tm_fill("black_search_rate", 
           style="jenks",
           palette="viridis",
           title="Black Hit Rate (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
-            legend.text.size = 0.3,
+            legend.text.size = 0.4,
             legend.outside = FALSE,
             legend.position = c(.8,0)) +
   tm_credits("(a)", position=c(0,0.8), size=1)
 
 p2 <- tm_shape(all_data) + 
-  tm_fill("white_hit_rate", 
+  tm_fill("black_pop", 
+          style="jenks",
+          palette="viridis",
+          title="Black Population Percent (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.4,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(a)", position=c(0,0.8), size=1)
+
+p3 <- tm_shape(all_data) + 
+  tm_fill("white_search_rate", 
           style="jenks",
           palette="viridis",
           title="White Hit Rate (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
-            legend.text.size = 0.3,
+            legend.text.size = 0.4,
             legend.outside = FALSE,
             legend.position = c(.8,0)) +
   tm_credits("(b)", position=c(0,0.8), size=1)
 
-p3 <- tm_shape(all_data) + 
-  tm_fill("asian_hit_rate", 
+p4 <- tm_shape(all_data) + 
+  tm_fill("white_pop", 
+          style="jenks",
+          palette="viridis",
+          title="White Population Percent (Jenks)")+
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,
+            legend.title.size = 0.5,
+            legend.text.size = 0.4,
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) +
+  tm_credits("(b)", position=c(0,0.8), size=1)
+
+p5 <- tm_shape(all_data) + 
+  tm_fill("asian_search_rate", 
           style="jenks",
           palette="viridis",
           title="Asian Hit Rate (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
-            legend.text.size = 0.3,
+            legend.text.size = 0.4,
             legend.outside = FALSE,
             legend.position = c(.8,0)) +
   tm_credits("(c)", position=c(0,0.8), size=1)
 
-p4 <- tm_shape(all_data) + 
-  tm_fill("other_hit_rate", 
+
+p6 <- tm_shape(all_data) + 
+  tm_fill("asian_pop", 
           style="jenks",
           palette="viridis",
-          title="Other Ethnic Group Hit Rate (Jenks)")+
+          title="Asian Population Percent (Jenks)")+
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.title.size = 0.5,
-            legend.text.size = 0.3,
+            legend.text.size = 0.4,
             legend.outside = FALSE,
             legend.position = c(.8,0)) +
-  tm_credits("(d)", position=c(0,0.8), size=1)
+  tm_credits("(c)", position=c(0,0.8), size=1)
 
-
-p <- tmap_arrange(p1, p2, p3, p4)
+p <- tmap_arrange(p1, p2, p3, p4, p5, p6)
+#tmap_save(p, "output/hit_rate_map2.png",dpi=500)
 p
 ```
 
@@ -1290,7 +1332,66 @@ test <- all_data %>%
 
 # convert NAs to zero
 test[is.na(test)] <- 0
+```
 
+
+```{r}
+test_black <- test %>% 
+  filter(black_hit_rate==0)%>% 
+  dplyr::select(msoa_code) %>% 
+  left_join(.,
+            all_data %>% dplyr::select(msoa_code, msoa_name,
+                                       black_pop_rate,
+                                       black_search_rate, 
+                                       arrest_black),
+            by="msoa_code")
+
+test_black$boro_name = substr(test_black$msoa_name,1,nchar(test_black$msoa_name)-4)
+summary(all_data$black_search_rate)
+
+test_black <- test_black %>% 
+  mutate(black_ss_compare = case_when(
+      (black_search_rate < 23.60) ~ "Below London Average",
+      TRUE ~ "Above London Average"))
+
+test_black %>% 
+  group_by(black_ss_compare)%>%
+  summarise(., count=n()) %>% 
+  kable()
+
+```
+
+```{r}
+test_white <- test %>% 
+  filter(white_hit_rate==0)%>% 
+  dplyr::select(msoa_code) %>% 
+  left_join(.,
+            all_data %>% dplyr::select(msoa_code, msoa_name,
+                                       white_pop_rate,
+                                       white_search_rate, 
+                                       arrest_white),
+            by="msoa_code")
+
+test_white$boro_name = substr(test_white$msoa_name,1,nchar(test_white$msoa_name)-4)
+summary(all_data$white_search_rate)
+
+test_white <- test_white %>% 
+  mutate(white_ss_compare = case_when(
+      (white_search_rate < 4.901) ~ "Below London Average",
+      TRUE ~ "Above London Average"))
+
+test_white %>% 
+  group_by(white_ss_compare)%>%
+  summarise(., count=n()) %>% 
+  kable()
+```
+
+```{r}
+summary(all_data$asian_hit_rate)
+```
+
+
+```{r}
 test_0 <- test %>% 
   filter(asian_hit_rate==0) %>% 
   dplyr::select(msoa_code) %>% 
@@ -1337,8 +1438,9 @@ test_0 %>%
   summarise(., count=n()) %>% 
   kable()
 
+
 test_0 %>% 
-  filter((asian_pop_compare=="Below London Average") & (asian_ss_compare=="Above London Average")) %>% 
+  filter(asian_ss_compare=="Above London Average") %>% 
   kable()
 ```
 
@@ -1354,13 +1456,35 @@ tm_shape(asia0) +
   tm_polygons("msoa_name", palette="red")
 ```
 
+
+```{r}
+tm_shape(all_data) + 
+  tm_fill("asian_pop_rate",
+        palette= "-RdGy",
+        midpoint=NA) +
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.8,
+          col = "black",
+          fontface ="bold",
+          alpha = 0.8) +
+  tm_borders("red", alpha = 1) +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
+            legend.title.size = 0.5,
+            legend.text.size = 0.3,            
+            legend.outside = FALSE,
+            legend.position = c(.8,0)) 
+```
+
 ## Spatial autocorrelation
 
 Create a subset data of all rates for later parts.
 
 ```{r}
 all_rates <- all_data %>% 
-  dplyr::select(ends_with("rate") | msoa_code)
+  dplyr::select(ends_with("rate") | msoa_code | black_pop | white_pop | asian_pop)
 ```
 
 Create a neighborhoods list and spatial weight matrix.
@@ -1514,6 +1638,25 @@ moranI_total_crime <- all_rates %>%
   as.vector()%>%
   localmoran(., Lward_lw, zero.policy = TRUE)%>%
   as_tibble()
+
+moranI_black_pop <- all_rates %>% 
+  pull(black_pop) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_white_pop <- all_rates %>% 
+  pull(white_pop) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
+moranI_asian_pop <- all_rates %>% 
+  pull(asian_pop) %>%
+  as.vector()%>%
+  localmoran(., Lward_lw, zero.policy = TRUE)%>%
+  as_tibble()
+
 ```
 
 copy the Moran's I score and the z-score standard deviation back to all_rates dataframe
@@ -1529,7 +1672,11 @@ all_rates <- all_rates %>%
   mutate(black_arrest_Iz = as.numeric(moranI_black_arrest$Z.Ii)) %>% 
   mutate(white_arrest_Iz = as.numeric(moranI_white_arrest$Z.Ii)) %>% 
   mutate(asian_arrest_Iz = as.numeric(moranI_asian_arrest$Z.Ii)) %>% 
-  mutate(total_crime_Iz = as.numeric(moranI_total_crime$Z.Ii)) 
+  mutate(total_crime_Iz = as.numeric(moranI_total_crime$Z.Ii)) %>% 
+  mutate(black_pop_Iz= as.numeric(moranI_black_pop$Z.Ii)) %>% 
+  mutate(white_pop_Iz = as.numeric(moranI_white_pop$Z.Ii)) %>% 
+  mutate(asian_pop_Iz = as.numeric(moranI_asian_pop$Z.Ii))
+
 ```
 
 We'll set the breaks manually based on the rule that data points \>2.58 or \<-2.58 standard deviations away from the mean are significant at the 99% level (\<1% chance that autocorrelation not present); \>1.96 - \<2.58 or \<-1.96 to \>-2.58 standard deviations are significant at the 95% level (\<5% change that autocorrelation not present). \>1.65 = 90% etc.
@@ -1554,6 +1701,11 @@ all_rates$s_white_arrest_rate <- scale(all_rates$white_arrest_rate) %>% as.vecto
 all_rates$s_asian_arrest_rate <- scale(all_rates$asian_arrest_rate) %>% as.vector()
 # crime rate
 all_rates$s_total_crime_rate <- scale(all_rates$total_crime_rate) %>% as.vector()
+# population
+all_rates$s_black_pop <- scale(all_rates$black_pop) %>% as.vector()
+all_rates$s_white_pop <- scale(all_rates$white_pop) %>% as.vector()
+all_rates$s_asian_pop <- scale(all_rates$asian_pop) %>% as.vector()
+
 ```
 
 Now we also want to account for the spatial dependence of our values. So what do we mean by this spatial dependence? When a value observed in one location depends on the values observed at neighbouring locations, there is a **spatial dependence**. And spatial data may show spatial dependence in the variables and error terms. *Why should spatial dependence occur?* There are two reasons commonly given. First, data collection of observations associated with spatial units may reflect measurement error. This happens when the boundaries for which information is collected do not accurately reflect the nature of the underlying process generating the sample data. A second reason for spatial dependence is that the spatial dimension of a social or economic characteristic may be an important aspect of the phenomenon. For example, based on the premise that location and distance are important forces at work, regional science theory relies on notions of spatial interaction and diffusion effects, hierarchies of place and spatial spillovers.
@@ -1573,7 +1725,13 @@ all_rates$lag_s_asian_search <- lag.listw(Lward_lw, all_rates$s_asian_search_rat
 all_rates$lag_s_black_arrest <- lag.listw(Lward_lw, all_rates$s_black_arrest_rate)
 all_rates$lag_s_white_arrest <- lag.listw(Lward_lw, all_rates$s_white_arrest_rate)
 all_rates$lag_s_asian_arrest <- lag.listw(Lward_lw, all_rates$s_asian_arrest_rate)
+# crime
 all_rates$lag_s_total_crime <- lag.listw(Lward_lw, all_rates$s_total_crime_rate)
+# population
+all_rates$lag_s_black_pop <- lag.listw(Lward_lw, all_rates$s_black_pop)
+all_rates$lag_s_white_pop <- lag.listw(Lward_lw, all_rates$s_white_pop)
+all_rates$lag_s_asian_pop <- lag.listw(Lward_lw, all_rates$s_asian_pop)
+
 ```
 
 ```{r}
@@ -1718,6 +1876,62 @@ all_rates <- all_rates %>%
 ```
 
 ```{r}
+all_rates <- all_rates %>% 
+  mutate(quad_sig_black_pop = ifelse(all_rates$s_black_pop > 0 & 
+                              all_rates$lag_s_black_pop > 0 & 
+                              moranI_black_pop[,5] <= 0.05, 
+                     "high-high",
+                     ifelse(all_rates$s_black_pop <= 0 & 
+                              all_rates$lag_s_black_pop <= 0 & 
+                              moranI_black_pop[,5] <= 0.05, 
+                     "low-low", 
+                     ifelse(all_rates$s_black_pop > 0 & 
+                              all_rates$lag_s_black_pop <= 0 & 
+                              moranI_black_pop[,5] <= 0.05, 
+                     "high-low",
+                     ifelse(all_rates$s_black_pop <= 0 & 
+                              all_rates$lag_s_black_pop > 0 & 
+                              moranI_black_pop[,5] <= 0.05,
+                     "low-high", 
+                     "non-significant")))),
+      quad_sig_white_pop = ifelse(all_rates$s_white_pop > 0 & 
+                              all_rates$lag_s_white_pop > 0 & 
+                              moranI_white_pop[,5] <= 0.05, 
+                     "high-high",
+                     ifelse(all_rates$s_white_pop <= 0 & 
+                              all_rates$lag_s_white_pop <= 0 & 
+                              moranI_white_pop[,5] <= 0.05, 
+                     "low-low", 
+                     ifelse(all_rates$s_white_pop > 0 & 
+                              all_rates$lag_s_white_pop <= 0 & 
+                              moranI_white_pop[,5] <= 0.05, 
+                     "high-low",
+                     ifelse(all_rates$s_white_pop <= 0 & 
+                              all_rates$lag_s_white_pop > 0 & 
+                              moranI_white_pop[,5] <= 0.05,
+                     "low-high", 
+                     "non-significant")))),
+      quad_sig_asian_pop = ifelse(all_rates$s_asian_pop > 0 & 
+                              all_rates$lag_s_asian_pop > 0 & 
+                              moranI_asian_pop[,5] <= 0.05, 
+                     "high-high",
+                     ifelse(all_rates$s_asian_pop <= 0 & 
+                              all_rates$lag_s_asian_pop <= 0 & 
+                              moranI_asian_pop[,5] <= 0.05, 
+                     "low-low", 
+                     ifelse(all_rates$s_asian_pop > 0 & 
+                              all_rates$lag_s_asian_pop <= 0 & 
+                              moranI_asian_pop[,5] <= 0.05, 
+                     "high-low",
+                     ifelse(all_rates$s_asian_pop <= 0 & 
+                              all_rates$lag_s_asian_pop > 0 & 
+                              moranI_asian_pop[,5] <= 0.05,
+                     "low-high", 
+                     "non-significant")))))
+```
+
+
+```{r}
 table(all_rates$quad_sig_black_search)
 table(all_rates$quad_sig_white_search)
 table(all_rates$quad_sig_asian_search)
@@ -1731,22 +1945,18 @@ table(all_rates$quad_sig_total_crime)
 
 ### maps
 
-```{r warning=FALSE}
+```{r warning=FALSE, message=FALSE}
+all_rates %>% st_as_sf
 t1 <- tm_shape(all_rates) + 
   tm_fill("quad_sig_black_search",
         palette= "RdGy",
         midpoint=NA,
-        title="LISA, Black Searches") +
-  tm_shape(merged_boro) + 
-  tm_text("boro_name", 
-          size= 0.3,
-          col = "black",
-          fontface ="bold") +
+        title="LISA, Black Search Hotpots") +
   tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
-            legend.title.size = 0.5,
+            legend.title.size = 0.4,
             legend.text.size = 0.3,            
             legend.outside = FALSE,
             legend.position = c(.8,0)) +
@@ -1756,17 +1966,12 @@ t3 <- tm_shape(all_rates) +
   tm_fill("quad_sig_white_search",
         palette= "RdGy",
         midpoint=NA,
-        title="LISA, White Searches") +
-  tm_shape(merged_boro) + 
-  tm_text("boro_name", 
-          size= 0.3,
-          col = "black",
-          fontface ="bold") +
+        title="LISA, White Search Hotpots") +
     tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
-            legend.title.size = 0.5,
+            legend.title.size = 0.4,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
@@ -1776,37 +1981,27 @@ t5 <- tm_shape(all_rates) +
   tm_fill("quad_sig_asian_search",
         palette= "RdGy",
         midpoint=NA,
-        title="LISA, Asian Searches") +
-  tm_shape(merged_boro) + 
-  tm_text("boro_name", 
-          size= 0.3,
-          col = "black",
-          fontface ="bold") +  
+        title="LISA, Asian Search Hotpots") +
   tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
-            legend.title.size = 0.5,
+            legend.title.size = 0.4,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
   tm_credits("(e)", position=c(0,0.8), size=1)
 
 t2 <- tm_shape(all_rates) + 
-  tm_fill("quad_sig_black_arrest",
+  tm_fill("quad_sig_black_pop",
         palette= "RdGy",
         midpoint=NA,
-        title="LISA, Black Arrests") +
-  tm_shape(merged_boro) + 
-  tm_text("boro_name", 
-          size= 0.3,
-          col = "black",
-          fontface ="bold") +
+        title="LISA, Black Pop. Hotpots") +
     tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,
             legend.outside.size = 1,
-            legend.title.size = 0.5,
+            legend.title.size = 0.4,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
@@ -1814,50 +2009,56 @@ t2 <- tm_shape(all_rates) +
 
 
 t4 <- tm_shape(all_rates) + 
-  tm_fill("quad_sig_white_arrest",
+  tm_fill("quad_sig_white_pop",
         palette= "RdGy",
         midpoint=NA,
-        title="LISA, White Arrests") +
-  tm_shape(merged_boro) + 
-  tm_text("boro_name", 
-          size= 0.3,
-          col = "black",
-          fontface ="bold") +
+        title="LISA, White Pop. Hotpots") +
     tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
-            legend.title.size = 0.5,
+            legend.title.size = 0.4,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
   tm_credits("(d)", position=c(0,0.8), size=1)
 
 t6 <- tm_shape(all_rates) + 
-  tm_fill("quad_sig_asian_arrest",
+  tm_fill("quad_sig_asian_pop",
         palette= "RdGy",
         midpoint=NA,
-        title="LISA, Asian Arrests") +
-  tm_shape(merged_boro) + 
-  tm_text("boro_name", 
-          size= 0.3,
-          col = "black",
-          fontface ="bold") +
+        title="LISA, Asian Pop. Hotpots") +
     tm_borders(NA, alpha = 0.3) +
   tm_legend(show=T)+
   tm_layout(frame=FALSE,            
             legend.outside.size = 1,
-            legend.title.size = 0.5,
+            legend.title.size = 0.4,
             legend.text.size = 0.3,
             legend.outside = FALSE,
             legend.position = c(.8,0))+
   tm_credits("(f)", position=c(0,0.8), size=1)
 
-t=tmap_arrange(t1, t2, t3, t4, t5, t6,
-               nrow = 3, ncol = 2)
-#tmap_save(t, "output/hit_rate_map.png",dpi=500)
+t7 <- tm_shape(all_rates) + 
+  tm_fill("quad_sig_total_crime",
+        palette= "RdGy",
+        midpoint=NA,
+        title="LISA, Crime Hotpots") +
+    tm_borders(NA, alpha = 0.3) +
+  tm_legend(show=T)+
+  tm_layout(frame=FALSE,            
+            legend.outside.size = 1,
+            legend.title.size = 0.4,
+            legend.text.size = 0.3,
+            legend.outside = FALSE,
+            legend.position = c(.8,0))+
+  tm_credits("(g)", position=c(0,0.8), size=1)
+
+t=tmap_arrange(t1, t2, t3, t4, t5, t6, t7,
+               nrow = 4, ncol = 2)
 t
+tmap_save(t, "output/lisa_map_withPOP.png",dpi=500)
 ```
+
 
 So how do we interpret these results? Well keep in mind:
 
@@ -1871,7 +2072,7 @@ So essentially this map now tells us that there was statistically significant mo
 
 The local moran's I test suggests different ethic groups have different hot-spots of frequently searched places and arrested places. Therefore, it is reasonable to investigate each of the ethnic group in terms of their search rate and arrest rate more thoroughly.
 
-### hypothesis
+hypothesis
 
 -   Is there a relationship between S&S (s60) search rate and arrest rate?
 
@@ -1889,7 +2090,7 @@ The local moran's I test suggests different ethic groups have different hot-spot
 colnames(all_data)
 ```
 
-#### total
+### Arrest ~ Search
 
 Assumption 1: there is a linear relationship between my variables --
 
@@ -1993,25 +2194,8 @@ hist(rsid)
 
 ```
 
-The predicted function is:
-
-y = 0.069 + 0.109 ss60 (R 0.935) meaning for 1 increase in stop and search for every thousand of population, the model suggests the arrest count is expected to increase 0.0424. In order words, on average, for every 1k stop and search in London, we are expected to have 42 arrests.
-
-Plot equation back to the scatter plot
-
 ```{r}
-Lfun <- function(xvar) {
- (0.069 + 0.109*xvar)
-}
-
-# plot
-ggplot(regression_data,
-       aes(y=total_arrest_rate,
-           x=total_search_rate)) +
-  geom_point() +
-  stat_function(fun = Lfun, geom = "line", col="red") +
-  geom_label(x=Inf, y = Inf, 
-           label = "y = 0.069 + 0.109*x \n R-sqr = 0.935", vjust=3, hjust=1, col="red")
+vif(model_lr)
 ```
 
 Assumption 3: errors/residuals in the model exhibit constant / homogeneous variance
@@ -2048,13 +2232,7 @@ regression_data %>%
 
 ```
 
-Moderate spatial autocorrelation.
-
-```{r}
-tm_shape(regression_data) +
-  tm_polygons("lr_resid", 
-              palette = "-RdYlBu")
-```
+Moderate spatial autocorrelation so GWR. 
 
 Convert to sp object
 
@@ -2110,20 +2288,6 @@ regression_data <- regression_data %>%
          coef_innerOuter = results$inner_outerInner.London)
 ```
 
-```{r}
-tm_shape(regression_data) +
-  tm_polygons(col = "coef_search", 
-              palette = "-RdBu", 
-              alpha = 0.5)
-
-tm_shape(regression_data) +
-  tm_polygons(col = "coef_innerOuter", 
-              palette = "-RdBu", 
-              alpha = 0.5)
-```
-
-From the above map, for 1% increase in search rate, the resulting arrest rate can increase from 0.04% to 0.065%, showing some boroughs' stop and searches are more sensitive to increase in crime rate.
-
 Of course, these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
 
 ```{r}
@@ -2138,18 +2302,9 @@ regression_data <- regression_data %>%
 
 regression_data <- regression_data %>%
   mutate(se_innerOuter = sigTest_innerOuter)
-
-# map the standard errors
-tm_shape(regression_data) +
-  tm_polygons(col = "se_innerOuter", 
-              palette = "-RdYlBu")
-
-tm_shape(regression_data) +
-  tm_polygons(col = "se_search", 
-              palette = "-RdYlBu")
 ```
 
-##### map
+
 
 ```{r}
 totalGWR <- subset(regression_data) 
@@ -2163,53 +2318,9 @@ totalGWR$coef_innerOuter <- replace(totalGWR$coef_innerOuter,
                     NA) 
 
 totalGWR <- totalGWR %>% 
-  mutate_if(is.numeric, ~round(., 3))
+  mutate_if(is.numeric, ~round(., 2))
 ```
 
-```{r}
-tm1 <- tm_shape(totalGWR) + 
-  tm_fill("coef_search", 
-          palette= "viridis",
-          style = "jenks",
-          title = "GWR, total search coefficients",
-          textNA = "Non-significant",
-          title.fontface = "bold",
-          alpha = 0.8)+  
-  tm_borders(col = NA, alpha = 0.1) +
-  tm_layout(legend.title.size = 0.6,
-            legend.text.size = 0.5,
-            legend.outside = FALSE,
-            frame = FALSE,
-            legend.position = c(.8,0),
-            legend.title.fontface = "bold") +
-  tm_credits("(a)", position=c(0,0.8), size=1) +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
-
-tm2 <- tm_shape(totalGWR) + 
-  tm_fill("coef_innerOuter", 
-          style = "jenks",
-          palette = "-RdYlBu",
-          title = "GWR, total inner outer London coefficients",
-          textNA = "Non-significant",
-          title.fontface = "bold",
-          alpha = 0.8)+  
-  tm_borders(col = NA, alpha = 0.1) +
-  tm_layout(legend.title.size = 0.6,
-            legend.text.size = 0.5,
-            legend.outside = FALSE,
-            frame = FALSE,
-            legend.position = c(.8,0),
-            legend.title.fontface = "bold") +
-  tm_credits("(a)", position=c(0,0.8), size=1) +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
-
-tm1
-tm2
-```
 
 #### Black
 
@@ -2239,7 +2350,7 @@ stat_smooth(method="lm", se=FALSE, size=1) +
 ###### assumption2 #####
 # compute linear regression model
 model_b <- regression_data %>% 
-  lm(black_arrest_rate ~ black_search_rate, data=.)
+  lm(black_arrest_rate ~ black_search_rate + inner_outer, data=.)
 
 # summary stats
 summary(model_b)
@@ -2279,20 +2390,120 @@ regression_data %>%
 
 y = 0.258 + 0.115 black ss + 0.157 inner London
 
-```{r}
-library(ggplot2)
-Lfun <- function(xvar) {
- (0.258 + 0.115*xvar)
-}
 
-# plot
-ggplot(regression_data,
-       aes(y=black_arrest_rate,x=black_search_rate)) +
-  geom_point() +
-  stat_function(fun = Lfun, geom = "line", col="red") +
-  geom_label(x=Inf, y = Inf, 
-           label = "y = 0.258 + 0.115*x \n R-sqr = 0.928", vjust=3, hjust=1, col="red")
+```{r}
+#calculate kernel bandwidth
+GWRbandwidth <- gwr.sel(black_arrest_rate ~ black_search_rate + inner_outer,
+                  data = regression_data_SP,
+                        coords=coordsMSP,
+                        adapt=T)
 ```
+
+run the model
+
+```{r}
+#run the gwr model
+model_gwrBlack = gwr(black_arrest_rate ~ black_search_rate + inner_outer,
+                  data = regression_data_SP, 
+                coords=coordsMSP, 
+                adapt=GWRbandwidth, 
+                hatmatrix=TRUE, 
+                se.fit=TRUE)
+
+#print the results of the model
+model_gwrBlack
+```
+
+Attach coefficients to our dataframe
+
+```{r}
+results <- as.data.frame(model_gwrBlack$SDF)
+names(results)
+```
+
+```{r}
+regression_data <- regression_data %>%
+  mutate(coef_Blacksearch = results$black_search_rate,
+         coef_blackInner = results$inner_outerInner.London)
+```
+
+
+these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
+
+```{r}
+#run the significance test
+sigTest_Blacksearch = abs(model_gwrBlack$SDF$"black_search_rate") - (2* model_gwrBlack$SDF$"black_search_rate_se")
+
+sigTest_BlackInner = abs(model_gwrBlack$SDF$"inner_outerInner.London") - (2* model_gwrBlack$SDF$"inner_outerInner.London_se")
+
+#store significance results
+regression_data <- regression_data %>%
+  mutate(se_Blacksearch = sigTest_Blacksearch,
+         se_BlackInner = sigTest_BlackInner)
+```
+
+prepare for the final plot
+
+```{r}
+blackGWR <- subset(regression_data) 
+# replace non-sig to na
+blackGWR$coef_Blacksearch <- replace(blackGWR$coef_Blacksearch, 
+                    blackGWR$se_Blacksearch < 0,
+                    NA) 
+
+blackGWR$coef_blackInner <- replace(blackGWR$coef_blackInner, 
+                    blackGWR$se_BlackInner < 0,
+                    NA) 
+
+blackGWR <- blackGWR %>% 
+  mutate_if(is.numeric, ~round(., 2))
+                                        
+```
+
+
+```{r}
+tm3 <- tm_shape(blackGWR) + 
+  tm_fill("coef_Blacksearch", 
+          palette= "viridis",
+          style = "jenks",
+          title = "GWR, black search rate coef.",
+          textNA = "Non-significant",
+          title.fontface = "bold",
+          alpha = 0.8)+  
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.6,
+            legend.text.size = 0.5,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            legend.title.fontface = "bold") +
+  tm_credits("(c)", position=c(0,0.8), size=1) 
+
+tm4 <- tm_shape(blackGWR) + 
+  tm_fill("coef_blackInner", 
+          palette= "viridis",
+          style = "jenks",
+          title = "GWR, black Inner London coef.",
+          textNA = "Non-significant",
+          title.fontface = "bold",
+          alpha = 0.8)+  
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.6,
+            legend.text.size = 0.5,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            legend.title.fontface = "bold") +
+  tm_credits("(d)", position=c(0,0.8), size=1) 
+
+
+tm3
+tm4
+```
+
+
+
+
 
 #### White
 
@@ -2322,7 +2533,7 @@ stat_smooth(method="lm", se=FALSE, size=1) +
 ###### assumption2 #####
 # compute linear regression model
 model_w <- regression_data %>% 
-  lm(white_arrest_rate ~ white_search_rate, data=.)
+  lm(white_arrest_rate ~ white_search_rate + inner_outer, data=.)
 
 # summary stats
 summary(model_w)
@@ -2330,11 +2541,11 @@ summary(model_w)
 # append residuals data to regression_data 
 regression_data <- model_w %>%
   augment(., regression_data) %>% 
-  rename(white_resid = ".resid")
+  rename(white_resid2 = ".resid")
 
 #plot residuals
 regression_data%>%
-  dplyr::select(white_resid)%>%
+  dplyr::select(white_resid2)%>%
   pull()%>%
   qplot()+ 
   geom_histogram()
@@ -2355,31 +2566,19 @@ plot(model_w)
 
 ###### assumption4 #####
 regression_data %>% 
-    pull(white_resid) %>% 
+    pull(white_resid2) %>% 
     as.vector() %>% 
     moran.test(., Lward_lw, zero.policy = TRUE)
 ```
 
-y = 0.106 + 0.102 white ss + 0.0465 inner London
-
 ```{r}
-library(ggplot2)
-Lfun <- function(xvar) {
- (0.106 + 0.102*xvar)
-}
-
-# plot
-ggplot(regression_data,
-       aes(y=white_arrest_rate,x=white_search_rate)) +
-  geom_point() +
-  stat_function(fun = Lfun, geom = "line", col="red") +
-  geom_label(x=Inf, y = Inf, 
-           label = "y = 0.106 + 0.102*x \n R-sqr = 0.915",vjust=3, hjust=1, col="red")
+vif(model_w)
 ```
+
 
 ```{r}
 #calculate kernel bandwidth
-GWRbandwidth <- gwr.sel(white_arrest_rate ~ white_search_rate,
+GWRbandwidth <- gwr.sel(white_arrest_rate ~ white_search_rate +inner_outer,
                   data = regression_data_SP,
                         coords=coordsMSP,
                         adapt=T)
@@ -2389,7 +2588,7 @@ run the model
 
 ```{r}
 #run the gwr model
-model_gwr2 = gwr(white_arrest_rate ~ white_search_rate,
+model_gwr2 = gwr(white_arrest_rate ~ white_search_rate + inner_outer,
                   data = regression_data_SP, 
                 coords=coordsMSP, 
                 adapt=GWRbandwidth, 
@@ -2409,18 +2608,9 @@ names(results)
 
 ```{r}
 regression_data <- regression_data %>%
-  mutate(coef_Whitesearch = results$white_search_rate)
+  mutate(coef_Whitesearch = results$white_search_rate,
+         coef_whiteInner = results$inner_outerInner.London)
 ```
-
-```{r}
-regression_data <- regression_data %>% st_as_sf()
-tm_shape(regression_data) +
-  tm_polygons(col = "coef_Whitesearch", 
-              palette = "-RdBu", 
-              alpha = 0.5)
-```
-
-From the above map, for 1% increase in search rate, the resulting arrest rate can increase from 0.04% to 0.065%, showing some boroughs' stop and searches are more sensitive to increase in crime rate.
 
 Of course, these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
 
@@ -2428,23 +2618,26 @@ Of course, these results may not be statistically significant across the whole o
 #run the significance test
 sigTest_Whitesearch = abs(model_gwr2$SDF$"white_search_rate") - (2* model_gwr2$SDF$"white_search_rate_se")
 
+sigTest_WhiteInner = abs(model_gwr2$SDF$"inner_outerInner.London") - (2* model_gwr2$SDF$"inner_outerInner.London_se")
+
 #store significance results
 regression_data <- regression_data %>%
-  mutate(se_Whitesearch = sigTest_Whitesearch)
-
-# map the standard errors
-tm_shape(regression_data) +
-  tm_polygons(col = "se_Whitesearch", 
-              palette = "-RdYlBu")
+  mutate(se_Whitesearch = sigTest_Whitesearch,
+         se_WhiteINner = sigTest_WhiteInner)
 ```
 
 prepare for the final plot
 
 ```{r}
-whiteGWR <- subset(regression_data) 
+whiteGWR <- subset(regression_data) %>% 
+  st_as_sf()
 # replace non-sig to na
 whiteGWR$coef_Whitesearch <- replace(whiteGWR$coef_Whitesearch, 
                     whiteGWR$se_Whitesearch < 0,
+                    NA) 
+
+whiteGWR$coef_whiteInner <- replace(whiteGWR$coef_whiteInner, 
+                    whiteGWR$se_WhiteINner < 0,
                     NA) 
 
 whiteGWR <- whiteGWR %>% 
@@ -2452,30 +2645,93 @@ whiteGWR <- whiteGWR %>%
                                         
 ```
 
-##### map
 
 ```{r}
-tm3 <- tm_shape(whiteGWR) + 
-  tm_fill("coef_Whitesearch", 
-          palette= "-RdYlBu",
+tm1 <- tm_shape(totalGWR) + 
+  tm_fill("coef_search", 
+          palette= "-RdGy",
           style = "jenks",
-          title = "GWR, white searches coefficients",
+          title = "GWR, global search\ncoef.(Jenks)",
           textNA = "Non-significant",
-          title.fontface = "bold",
-          alpha = 0.8)+  
+          title.fontface = "bold")+  
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold",
+          alpha = 0.8) +
   tm_borders(col = NA, alpha = 0.1) +
-  tm_layout(legend.title.size = 0.6,
-            legend.text.size = 0.5,
+  tm_layout(legend.title.size = 0.5,
+            legend.text.size = 0.4,
             legend.outside = FALSE,
             frame = FALSE,
             legend.position = c(.8,0),
             legend.title.fontface = "bold") +
-  tm_credits("(c)", position=c(0,0.8), size=1) +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
+  tm_credits("(a)", position=c(0,0.8), size=1) 
 
-tm3
+tm2 <- tm_shape(totalGWR) + 
+  tm_fill("coef_innerOuter", 
+          style = "jenks",
+          palette = "-RdGy",
+          title = "GWR, Inner London\ncoef.(Jenks)",
+          textNA = "Non-significant",
+          title.fontface = "bold")+  
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold",
+          alpha = 0.8) +
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.5,
+            legend.text.size = 0.4,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            legend.title.fontface = "bold") +
+  tm_credits("(b)", position=c(0,0.8), size=1) 
+
+tm3 <- tm_shape(whiteGWR) + 
+  tm_fill("coef_Whitesearch", 
+          palette= "-RdGy",
+          style = "jenks",
+          title = "GWR, white search\ncoeff.(Jenks)",
+          textNA = "Non-significant",
+          title.fontface = "bold")+  
+  tm_shape(merged_boro) + 
+  tm_text("boro_name", 
+          size= 0.3,
+          col = "black",
+          fontface ="bold",
+          alpha = 0.8) +
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.5,
+            legend.text.size = 0.4,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            legend.title.fontface = "bold") +
+  tm_credits("(c)", position=c(0,0.8), size=1) 
+
+tm4 <- tm_shape(whiteGWR) + 
+  tm_fill("coef_whiteInner", 
+          palette= "viridis",
+          style = "jenks",
+          title = "GWR, Inner London\ncoeff.(Jenks)",
+          textNA = "Non-significant",
+          title.fontface = "bold")+  
+  tm_borders(col = NA, alpha = 0.1) +
+  tm_layout(legend.title.size = 0.5,
+            legend.text.size = 0.4,
+            legend.outside = FALSE,
+            frame = FALSE,
+            legend.position = c(.8,0),
+            legend.title.fontface = "bold") +
+  tm_credits("(d)", position=c(0,0.8), size=1) 
+
+tt <- tmap_arrange(tm1, tm2, tm3, tm4)
+tmap_save(tt, "output/GWR_map.png",dpi=500)
+tt
 ```
 
 #### Asian
@@ -2506,7 +2762,7 @@ stat_smooth(method="lm", se=FALSE, size=1) +
 ###### assumption2 #####
 # compute linear regression model
 model_a <- regression_data %>% 
-  lm(asian_arrest_rate ~ asian_search_rate, data=.)
+  lm(asian_arrest_rate ~ asian_search_rate + inner_outer, data=.)
 
 # summary stats
 summary(model_a)
@@ -2544,22 +2800,6 @@ regression_data %>%
     moran.test(., Lward_lw, zero.policy = TRUE)
 ```
 
-y = 0.0126 + 0.0968 asian ss + 0.0421 Inner London
-
-```{r}
-library(ggplot2)
-Lfun <- function(xvar) {
- (-0.0126 + 0.0968*xvar)
-}
-
-# plot
-ggplot(regression_data,
-       aes(y=asian_arrest_rate,x=asian_search_rate)) +
-  geom_point() +
-  stat_function(fun = Lfun, geom = "line", col="red") +
-  geom_label(x=Inf, y = Inf, 
-           label = "y = 0.0126 + 0.0968*x \n R-sqr = 0.741", vjust=3, hjust=1, col="red")
-```
 
 ```{r}
 #calculate kernel bandwidth
@@ -2596,16 +2836,6 @@ regression_data <- regression_data %>%
   mutate(coef_Asiansearch = results$asian_search_rate)
 ```
 
-```{r}
-regression_data <- regression_data %>% st_as_sf()
-tm_shape(regression_data) +
-  tm_polygons(col = "coef_Asiansearch", 
-              palette = "-RdBu", 
-              alpha = 0.5)
-```
-
-From the above map, for 1% increase in search rate, the resulting arrest rate can increase from 0.04% to 0.065%, showing some boroughs' stop and searches are more sensitive to increase in crime rate.
-
 Of course, these results may not be statistically significant across the whole of London. Roughly speaking, if a coefficient estimate is more than 2 standard errors away from zero, then it is "statistically significant."
 
 ```{r}
@@ -2615,11 +2845,6 @@ sigTest_Asiansearch = abs(model_gwr3$SDF$"asian_search_rate") - (2* model_gwr3$S
 #store significance results
 regression_data <- regression_data %>%
   mutate(se_asiansearch = sigTest_Asiansearch)
-
-# map the standard errors
-tm_shape(regression_data) +
-  tm_polygons(col = "se_asiansearch", 
-              palette = "-RdYlBu")
 ```
 
 filter out not-significally important areas
@@ -2641,8 +2866,6 @@ tm_shape(asianGWR) +
               alpha = 0.5,
               textNA = "Non-significant")
 ```
-
-##### map
 
 ```{r}
 tm4 <- tm_shape(asianGWR) + 
@@ -2667,7 +2890,7 @@ tm4 <- tm_shape(asianGWR) +
 tm4
 ```
 
-### Searches
+### Arrest ~ Crime 
 
 ```{r}
 colnames(all_data)
@@ -2679,7 +2902,7 @@ symbox(~total_arrest_rate,
        na.rm=T,
        powers=seq(-3,3,by=.5))
 
-ggplot(all_data, aes(x=log(median_income))) + 
+ggplot(all_data, aes(x=(no_qualification))) + 
   geom_histogram()
 ```
 
@@ -2699,7 +2922,8 @@ regression_data2 <- all_data %>%
                 lone_parent_rate,
                 lone_parent_with_children,
                 obesity_children,
-                obesity_aged16) %>% 
+                obesity_aged16,
+                no_qualification) %>% 
   mutate(search_log = log(total_search_rate),
          arrest_log = log(total_arrest_rate),
          crime_log = log(total_crime_rate),
@@ -2725,15 +2949,15 @@ regression_data2<- regression_data2 %>%
 contrasts(regression_data2$inner_outer)
 ```
 
-#### Simple: S&S \~ crime+inner/outer (R2 = 0.567)
+### Arrest ~ Crime + Inner/outer
 
 ```{r}
-model_l2 <- lm(arrest_log ~ crime_log + inner_outer,
+model_l2 <- lm(arrest_log ~ income_deprivation_rate,
                   data = regression_data2)
 summary(model_l2) 
 ```
 
-#### Multiple: all included
+### Arrest ~ other factors 
 
 ```{r}
 colnames(regression_data2)
@@ -2744,7 +2968,8 @@ colnames(regression_data2)
 model_mlr <- lm(arrest_log ~ crime_log  + income_log + unemp_log
                 + income_deprivation_rate + income_old_deprivation_rate
                 + bad_health_rate + cars_rate +inner_outer 
-                + lone_parent_with_children_log + obesity_children + obesity_aged16,
+                + lone_parent_with_children_log + obesity_children + obesity_aged16
+                + no_qualification,
                   data = regression_data2)
 summary(model_mlr)
 ```
@@ -2755,7 +2980,7 @@ VIF
 vif(model_mlr)
 ```
 
-#### Multiple: vif proofed
+### Final model
 
 ```{r}
 # build model 
@@ -2780,7 +3005,7 @@ Check residual's distribution and variance
 ```{r}
 # append residuals data to regression_data 
 regression_data2 <- model_final %>%
-  augment(., regression_data2)
+  augment(., regression_data2) 
 
 # plot residuals
 regression_data2 %>%
@@ -2878,7 +3103,7 @@ summary(model_sem)
 tidy(model_sem) %>% kable()
 ```
 
-##### Lagrange multiple tests
+#### Lagrange multiple tests
 
 LMerr: for spatially error model
 
@@ -2890,7 +3115,7 @@ library(spdep)
 lm.LMtests(model_final, Lward.knn_4_weight, test = c("LMerr","LMlag","RLMerr","RLMlag","SARMA"))
 ```
 
-#### GWR
+### GWR
 
 ```{r}
 regression_data2 <- regression_data2 %>%
@@ -2898,12 +3123,6 @@ regression_data2 <- regression_data2 %>%
 
 par(mfrow=c(2,2))
 plot(model_final)
-```
-
-```{r}
-tm_shape(regression_data2) +
-  tm_polygons("model_final_res", 
-              palette = "-RdYlBu")
 ```
 
 ```{r}
@@ -3105,10 +3324,7 @@ f3 <- tm_shape(finalGWR) +
             frame = FALSE,
             legend.position = c(.8,0),
             legend.title.fontface = "bold") +
-  tm_credits("(c)", position=c(0,0.8), size=1) +
-  tm_compass(type = "4star", size = 3, fontsize = 0.5,
-             position = c("left", "bottom")) +
-  tm_scale_bar(position = c("left", "bottom")) 
+  tm_credits("(c)", position=c(0,0.8), size=1) 
 
 f4 <- tm_shape(finalGWR) + 
   tm_fill("coef_obesity", 
