@@ -1,10 +1,3 @@
 # dissertation2021
-This repo is mainly for my dissertation -- evaluating effectiveness of London Stop and Search in respose to increasing violent crimes. 
-Main methods:
-* DBSCAN
-* ST-DBSCAN
-* Spatial Autocorrelation
-* Agglomerative Hierarchical Clustering 
-* Simply linear regression model 
-* Poisson regression model (briefly) 
-* Geographically weighted regression Models
+This repo is mainly for my dissertation， Understanding the Racial Bias of Stop and Search in Greater London. 
+Through point pattern analysis via DBSCAN and disproportionality analysis, this study provides evidence of potential racial discrimination in police use of stop and search powers to specific boroughs and MSOA; and further explores factors that could explain the local variation of stop and search arrest rate by Geographically Weighted Regression and local Moran’s I maps. 
